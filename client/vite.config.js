@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // In production the frontend talks directly to Render backend
-  // Set VITE_API_URL in your build environment or .env.production
+  // Production base path — frontend lives at /kbingo/ on cPanel
+  base: process.env.NODE_ENV === 'production' ? '/kbingo/' : '/',
   server: {
     port: 5173,
     proxy: {
