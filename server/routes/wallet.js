@@ -244,7 +244,7 @@ router.post('/admin/approve/:id', requireAuth, requireAdmin, async (req, res) =>
     await conn.beginTransaction();
 
     const [txRows] = await conn.query(
-      'SELECT * FROM transactions WHERE id=? AND type="DEPOSIT" AND status="PENDING"',
+      "SELECT * FROM transactions WHERE id=? AND type='DEPOSIT' AND status='PENDING'",
       [txId]
     );
     if (!txRows.length) {
@@ -338,7 +338,7 @@ router.post('/admin/reject-withdrawal/:id', requireAuth, requireAdmin, async (re
     await conn.beginTransaction();
 
     const [txRows] = await conn.query(
-      'SELECT * FROM transactions WHERE id=? AND type="WITHDRAWAL" AND status="PENDING"',
+      "SELECT * FROM transactions WHERE id=? AND type='WITHDRAWAL' AND status='PENDING'",
       [txId]
     );
     if (!txRows.length) {
