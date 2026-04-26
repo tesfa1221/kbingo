@@ -15,8 +15,8 @@ const { validateBingo } = require('../utils/bingoValidator');
 
 const TARGET_PLAYERS = 4;   // fill up to this many total players
 const BOT_JOIN_AT    = 25;  // second in registration phase to join
-const MIN_BALLS_BEFORE_CLAIM = 20;  // bots wait at least this many balls
-const MAX_BALLS_BEFORE_CLAIM = 40;  // bots claim by this ball at latest
+const MIN_BALLS_BEFORE_CLAIM = 15;  // bots wait at least this many balls
+const MAX_BALLS_BEFORE_CLAIM = 30;  // bots claim by this ball at latest
 
 class BotManager {
   constructor(engine) {
@@ -146,15 +146,12 @@ class BotManager {
 
   // ── Auto-refill bot balances from house earnings ──────────
   static async refillBotBalances(houseEarnings) {
-    if (houseEarnings < 10) return;
+    // Always refill bots regardless of house earnings amount
     try {
-      const [bots] = await db.query('SELECT id, balance FROM users WHERE is_bot=1 AND balance < 100');
+      const [bots] = await db.query('SELECT id, balance FROM users WHERE is_bot=1 AND balance < 200');
       for (const bot of bots) {
-        const topup = Math.min(houseEarnings, 500 - parseFloat(bot.balance));
-        if (topup > 0) {
-          await db.query('UPDATE users SET balance=balance+? WHERE id=?', [topup, bot.id]);
-          console.log(`🤖 Bot ${bot.id} refilled +${topup} ETB`);
-        }
+        await db.query('UPDATE users SET balance=500 WHERE id=?', [bot.id]);
+        console.log(`🤖 Bot ${bot.id} refilled to 500 ETB`);
       }
     } catch(e) {
       console.error('Bot refill error:', e.message);

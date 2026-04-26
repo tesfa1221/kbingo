@@ -22,17 +22,17 @@ const ROOM_PRESETS = {
   standard: {
     label:        'Standard (10 ETB)',
     entryFee:     10,
-    minPrize:     50,   // house tops up if pool < 50 ETB
-    regDuration:  45,   // seconds
-    activeDuration: 90,
-    ballInterval: 2,    // seconds between balls
+    minPrize:     50,
+    regDuration:  45,
+    activeDuration: 70,
+    ballInterval: 2,
   },
   premium: {
     label:        'Premium (50 ETB)',
     entryFee:     50,
     minPrize:     200,
     regDuration:  45,
-    activeDuration: 90,
+    activeDuration: 70,
     ballInterval: 2,
   },
 };
