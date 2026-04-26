@@ -13,6 +13,7 @@
 const db = require('../db/connection');
 const { generateCard }  = require('../utils/cardGenerator');
 const { validateBingo } = require('../utils/bingoValidator');
+const BotManager        = require('./BotManager');
 
 const HOUSE_FEE_PCT = parseFloat(process.env.HOUSE_FEE_PERCENT) || 20;
 
@@ -58,6 +59,7 @@ class GameEngine {
     this.roundFinished = false;
     this._timer        = null;
     this._ballTimer    = null;
+    this.botManager    = new BotManager(this);
   }
 
   get TOTAL_DURATION() { return this.preset.regDuration + this.preset.activeDuration; }
@@ -103,11 +105,12 @@ class GameEngine {
     if (this.takenCards[cardNumber]) return { ok: false, reason: 'CARD_TAKEN' };
     if (this.tickets[userId]) return { ok: false, reason: 'ALREADY_REGISTERED' };
 
-    const [rows] = await db.query('SELECT balance, is_banned, ban_expires_at FROM users WHERE id=?', [userId]);
+    const [rows] = await db.query('SELECT balance, is_banned, ban_expires_at, is_bot FROM users WHERE id=?', [userId]);
     if (!rows.length) return { ok: false, reason: 'USER_NOT_FOUND' };
     const user = rows[0];
 
-    if (user.is_banned) {
+    // Skip ban check for bots
+    if (!user.is_bot && user.is_banned) {
       const now = new Date();
       if (!user.ban_expires_at || new Date(user.ban_expires_at) > now) return { ok: false, reason: 'USER_BANNED' };
       await db.query('UPDATE users SET is_banned=0, ban_expires_at=NULL WHERE id=?', [userId]);
@@ -197,6 +200,7 @@ class GameEngine {
     this.netPrize      = 0;
     this.winners       = [];
     this.roundFinished = false;
+    this.botManager.reset();
 
     try {
       await db.query("UPDATE games SET state='REGISTRATION', started_at=NOW() WHERE id=?", [this.gameId]);
@@ -212,6 +216,8 @@ class GameEngine {
     this.elapsed++;
     if (this.elapsed >= this.TOTAL_DURATION) { this._endRound(); return; }
     if (this.elapsed === this.REG_DURATION)   { this._startActivePhase(); }
+    // Let BotManager react to each tick
+    this.botManager.onTick(this.elapsed).catch(() => {});
     this.io.to(this.roomId).emit('game:tick', {
       e: this.elapsed,                          // short keys = less bytes
       r: this.TOTAL_DURATION - this.elapsed,
@@ -341,6 +347,10 @@ class GameEngine {
       pattern: this.winners[0]?.pattern || null, balls: this.balls,
     });
     console.log(`🏆 [${this.roomId}] Players: ${playerCount}, Winners: ${winnerCount}, Share: ${share} ETB, House: ${(this.prizePool - netPrize).toFixed(2)} ETB`);
+
+    // Refill bot balances from house earnings
+    const houseEarnings = this.prizePool - netPrize;
+    BotManager.refillBotBalances(houseEarnings).catch(() => {});
 
     // End round immediately after winner — no waiting for timer
     this._endRound();
