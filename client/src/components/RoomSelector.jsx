@@ -43,7 +43,10 @@ export default function RoomSelector() {
               </span>
               <div className="text-right">
                 <p className={`text-[10px] font-bold ${active ? 'text-neon' : 'text-muted'}`}>
-                  {room.realPlayerCount ?? room.playerCount} ተጫዋቾች
+                  {room.realPlayerCount > 0
+                    ? `${room.realPlayerCount} 👤 + ${(room.playerCount - room.realPlayerCount)} 🤖`
+                    : `${room.playerCount} ተጫዋቾች`
+                  }
                 </p>
                 <p className={`text-[9px] ${active ? 'text-gold/70' : 'text-muted/60'}`}>
                   {room.entryFee} ETB ክፍያ
