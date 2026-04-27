@@ -94,11 +94,6 @@ class GameEngine {
       prizePool:   this.prizePool,
       netPrize:    this.netPrize,
       playerCount:      new Set(Object.values(this.tickets).map(t => t.userId)).size,
-      realPlayerCount:  new Set(
-        Object.values(this.tickets)
-          .filter(t => !this._botUserIds?.has(t.userId))
-          .map(t => t.userId)
-      ).size,
       entryFee:    this.entryFee,
     };
   }
