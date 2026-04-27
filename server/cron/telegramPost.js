@@ -52,57 +52,15 @@ async function sendDailyPromotion(time) {
   if (!process.env.TELEGRAM_BOT_TOKEN) return;
 
   try {
-    // Get today's stats
-    const [stats] = await db.query(`
-      SELECT
-        COUNT(DISTINCT g.id) as games_today,
-        SUM(g.prize_pool) as total_pool,
-        COUNT(DISTINCT CASE WHEN u.is_bot=0 THEN t.user_id END) as real_players
-      FROM games g
-      LEFT JOIN tickets t ON t.game_id = g.id
-      LEFT JOIN users u ON u.id = t.user_id
-      WHERE DATE(g.created_at) = CURDATE() AND g.state = 'FINISHED'
-    `);
+    const PROMOS = [
+      `🎮 *K Bingo — ጫወት እና አትርፍ!*\n\n💰 10 ETB ብቻ ከፍለህ 80 ETB+ አትርፍ!\n🏆 አሁን ጫወት 👇`,
+      `💸 *ዛሬ K Bingo ጫወት!*\n\n🎯 ካርድ ምረጥ → ቁጥሮቹን ምልክት አድርግ → BINGO ጩህ!\n💰 10 ETB → 80 ETB+ ደራሽ 👇`,
+      `🔥 *K Bingo — ቀላል ጨዋታ፣ ትልቅ ሽልማት!*\n\n✅ 10 ETB ብቻ\n✅ ደቂቃዎች ውስጥ ታሸንፋለህ\n✅ ሽልማት ወዲያው ወደ ሂሳብህ 👇`,
+      `🏆 *K Bingo ጫወት — ዛሬ አሸናፊ ሁን!*\n\n💰 ትንሽ ክፍያ → ትልቅ ሽልማት\n🎮 አሁን ጫወት 👇`,
+      `⚡ *K Bingo — ፈጣን ጨዋታ፣ ፈጣን ሽልማት!*\n\n🎯 2 ደቂቃ ጨዋታ\n💰 10 ETB → 80 ETB+\n🏆 ዛሬ አሸናፊ ሁን 👇`,
+    ];
 
-    // Get today's top real winner
-    const [topWinner] = await db.query(`
-      SELECT u.first_name, SUM(w.prize_share) as total
-      FROM winners w
-      JOIN users u ON u.id = w.user_id
-      WHERE DATE(w.created_at) = CURDATE() AND u.is_bot = 0
-      GROUP BY u.id ORDER BY total DESC LIMIT 1
-    `);
-
-    const gamesPlayed  = stats[0]?.games_today || 0;
-    const totalPool    = parseFloat(stats[0]?.total_pool || 0).toFixed(0);
-    const realPlayers  = stats[0]?.real_players || 0;
-
-    let text;
-
-    if (time === 'morning') {
-      text =
-        `☀️ *እንኳን ደህና ዋሉ! K Bingo ዛሬ ይጀምራል!*\n\n` +
-        `🎮 ዛሬ ካርዶን ምረጥ፣ ቁጥሮቹን ምልክት አድርግ፣ BINGO ጩህ!\n\n` +
-        `💰 ዝቅተኛ ክፍያ: *10 ETB*\n` +
-        `🏆 ደራሽ: *40 ETB+*\n\n` +
-        `👇 አሁን ጫወት`;
-    } else {
-      // Evening — show today's results
-      if (topWinner[0]) {
-        text =
-          `🌙 *K Bingo — ዛሬ ምሽት!*\n\n` +
-          `🏆 ዛሬ ምርጥ አሸናፊ: *${topWinner[0].first_name}* (${parseFloat(topWinner[0].total).toFixed(0)} ETB)\n` +
-          `🎮 ዛሬ ${gamesPlayed} ዙሮች ተጫውተዋል\n` +
-          `👥 ${realPlayers} ተጫዋቾች\n\n` +
-          `አንተም ዛሬ ምሽት ጫወት! 👇`;
-      } else {
-        text =
-          `🌙 *K Bingo — ዛሬ ምሽት!*\n\n` +
-          `🎮 ዛሬ ምሽት ዙሮች ይጀምራሉ!\n` +
-          `💰 10 ETB ብቻ — ደራሽ 40 ETB+\n\n` +
-          `ለመጫወት 👇`;
-      }
-    }
+    const text = PROMOS[Math.floor(Math.random() * PROMOS.length)];
 
     // Send to all users with telegram_id who played in last 7 days
     const [users] = await db.query(`
