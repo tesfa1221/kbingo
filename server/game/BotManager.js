@@ -16,8 +16,8 @@ const { validateBingo } = require('../utils/bingoValidator');
 const TARGET_MIN_PLAYERS = 3;   // minimum total players
 const TARGET_MAX_PLAYERS = 6;   // maximum total players
 const BOT_JOIN_AT        = 25;  // second in registration phase to join
-const MIN_BALLS_BEFORE_CLAIM = 15;  // bots wait at least this many balls
-const MAX_BALLS_BEFORE_CLAIM = 30;  // bots claim by this ball at latest
+const MIN_BALLS_BEFORE_CLAIM = 22;  // bots wait — real players get first shot
+const MAX_BALLS_BEFORE_CLAIM = 32;  // bots claim by this ball at latest
 
 class BotManager {
   constructor(engine) {
@@ -71,6 +71,15 @@ class BotManager {
     await this.loadBots();
     if (!this.bots.length) return;
 
+    // Check if bots are enabled in settings
+    try {
+      const [rows] = await db.query("SELECT value FROM settings WHERE key_name='bots_enabled'");
+      if (rows.length > 0 && rows[0].value === '0') {
+        console.log(`🤖 [${this.engine.roomId}] Bots disabled by admin`);
+        return;
+      }
+    } catch { /* default to enabled */ }
+
     const engine       = this.engine;
     const realPlayers  = Object.keys(engine.tickets).length;
     // Random target between 3 and 6
@@ -100,7 +109,7 @@ class BotManager {
         this.botsThisRound.push(bot.id);
         console.log(`🤖 [${engine.roomId}] Bot ${bot.first_name} joined card #${cardNumber}`);
       } else {
-        console.log(`🤖 [${engine.roomId}] Bot ${bot.first_name} failed to join: ${result.reason}`);
+        console.log(`🤖 [${engine.roomId}] Bot ${bot.first_name} failed: ${result.reason}`);
       }
     }
   }
@@ -126,23 +135,25 @@ class BotManager {
     if (engine.roundFinished || engine.state !== 'ACTIVE') return;
     if (!this.botsThisRound.length) return;
 
-    // Shuffle bots and try each until one has a valid line
     const shuffled = [...this.botsThisRound].sort(() => Math.random() - 0.5);
     const drawnSet = new Set(engine.balls);
 
     for (const botId of shuffled) {
-      const ticket = engine.tickets[botId];
-      if (!ticket) continue;
+      // Find all tickets for this bot (new key format: userId_cardNumber)
+      const botTickets = Object.entries(engine.tickets)
+        .filter(([key]) => key.startsWith(`${botId}_`))
+        .map(([, t]) => t);
 
-      const { valid, pattern } = validateBingo(ticket.grid, drawnSet);
-      if (valid) {
-        console.log(`🤖 [${engine.roomId}] Bot ${botId} has valid BINGO (${pattern}) — claiming`);
-        await engine.claimBingo(botId);
-        return;
+      for (const ticket of botTickets) {
+        const { valid, pattern } = validateBingo(ticket.grid, drawnSet);
+        if (valid) {
+          console.log(`🤖 [${engine.roomId}] Bot ${botId} has valid BINGO (${pattern}) — claiming`);
+          await engine.claimBingo(botId);
+          return;
+        }
       }
     }
 
-    // No bot has a valid line yet — try again after 3 more balls
     const nextTarget = engine.balls.length + 3 + Math.floor(Math.random() * 4);
     this._scheduleBotClaim(nextTarget);
   }

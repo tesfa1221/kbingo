@@ -21,7 +21,7 @@ import ProfilePanel from './components/ProfilePanel';
 import RoomSelector from './components/RoomSelector';
 
 export default function App() {
-  const { user, token, myCard, setUser, setToken, activeTab, showCelebration } = useGameStore();
+  const { user, token, myCards, myCard, setUser, setToken, activeTab, showCelebration } = useGameStore();
   const [authChecked, setAuthChecked] = useState(false);
   const audioInitialized = useRef(false);
 
@@ -111,7 +111,7 @@ export default function App() {
               {/* Last round summary */}
               <RoundSummary />
               <BallDisplay />
-              {myCard ? <GameBoard /> : <CardGrid />}
+              {myCards.length > 0 ? <GameBoard /> : <CardGrid />}
             </div>
           </div>
         )}

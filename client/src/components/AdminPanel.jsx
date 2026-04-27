@@ -174,6 +174,62 @@ function EntryFeeSettings() {
 
       {/* Payment accounts editor */}
       <PaymentSettings />
+
+      {/* Bots toggle */}
+      <BotsToggle />
+    </div>
+  );
+}
+
+// ─── Bots Toggle ──────────────────────────────────────────
+function BotsToggle() {
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+
+  useEffect(() => {
+    api.get('/settings/bots-enabled')
+      .then(d => setEnabled(d.enabled !== false))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggle = async () => {
+    setSaving(true);
+    const next = !enabled;
+    try {
+      await api.put('/settings/bots-enabled', { enabled: next });
+      setEnabled(next);
+      toast.success(next ? '🤖 ቦቶች ተከፍተዋል' : '🤖 ቦቶች ተዘግተዋል');
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="glass rounded-2xl p-4 border border-white/5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold text-sm font-amharic">🤖 ቦቶች</h3>
+          <p className="text-muted text-xs font-amharic mt-0.5">
+            {enabled ? 'ቦቶች ዙሮችን ይቀላቀላሉ' : 'ቦቶች አይቀላቀሉም'}
+          </p>
+        </div>
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={toggle}
+          disabled={saving}
+          className={`relative w-14 h-7 rounded-full transition-colors disabled:opacity-50
+            ${enabled ? 'bg-neon' : 'bg-surface2 border border-white/20'}`}
+        >
+          <motion.div
+            animate={{ x: enabled ? 28 : 4 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            className="absolute top-1 w-5 h-5 rounded-full bg-white shadow"
+          />
+        </motion.button>
+      </div>
     </div>
   );
 }

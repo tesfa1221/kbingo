@@ -17,7 +17,7 @@ export const useGameStore = create((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('bingo_token');
-    set({ user: null, token: null, myCard: null, markedCells: [[2,2]], isWatcher: false });
+    set({ user: null, token: null, myCards: [], myCard: null, markedCells: [[2,2]], isWatcher: false });
   },
   updateBalance: (balance) => set((s) => ({
     user: s.user ? { ...s.user, balance } : s.user,
@@ -43,8 +43,9 @@ export const useGameStore = create((set, get) => ({
   setCurrentRoom: (roomId) => set({ currentRoom: roomId }),
   setRooms:    (rooms) => set({ rooms }),
 
-  // ── My ticket ───────────────────────────────────────────
-  myCard:      null,
+  // ── My tickets (up to 2 cards) ──────────────────────────
+  myCards:     [],   // [{ cardNumber, grid, markedCells }]
+  myCard:      null, // kept for backward compat — first card
   markedCells: [[2, 2]],
   isWatcher:   false,
 
@@ -105,33 +106,34 @@ export const useGameStore = create((set, get) => ({
     const s = get();
     const newBalls = [...s.balls, ball];
 
-    // Auto-mark: if ball is on user's card, mark it
-    let newMarked = s.markedCells;
-    if (s.autoMark && s.myCard) {
-      s.myCard.grid.forEach((row, r) => {
-        row.forEach((cell, c) => {
-          if (cell === ball) {
-            const alreadyMarked = s.markedCells.some(([mr, mc]) => mr === r && mc === c);
-            if (!alreadyMarked) {
-              newMarked = [...newMarked, [r, c]];
+    // Auto-mark all cards
+    let newCards = s.myCards;
+    if (s.autoMark && s.myCards.length > 0) {
+      newCards = s.myCards.map(card => {
+        let marked = card.markedCells;
+        card.grid.forEach((row, r) => {
+          row.forEach((cell, c) => {
+            if (cell === ball && !marked.some(([mr, mc]) => mr === r && mc === c)) {
+              marked = [...marked, [r, c]];
             }
-          }
+          });
         });
+        return { ...card, markedCells: marked };
       });
     }
+    let newMarked = newCards[0]?.markedCells || s.markedCells;
 
-    set({ balls: newBalls, latestBall: ball, markedCells: newMarked });
+    set({ balls: newBalls, latestBall: ball, myCards: newCards, markedCells: newMarked });
 
-    // Auto-BINGO: if auto-mark is ON, check for a winning line after marking
-    if (s.autoMark && s.myCard && s.gameState === 'ACTIVE') {
+    // Auto-BINGO: check ALL cards
+    if (s.autoMark && s.myCards.length > 0 && s.gameState === 'ACTIVE') {
       const drawnSet = new Set(newBalls);
-      const { valid } = validateBingo(s.myCard.grid, drawnSet);
-      if (valid) {
+      const anyValid = s.myCards.some(card => validateBingo(card.grid, drawnSet).valid);
+      if (anyValid) {
         setTimeout(() => {
           const { _claimBingo, showCelebration, gameState } = get();
           if (_claimBingo && !showCelebration && gameState === 'ACTIVE') {
             _claimBingo();
-            console.log('🎯 Auto-BINGO claimed!');
           }
         }, 300);
       }
@@ -143,18 +145,39 @@ export const useGameStore = create((set, get) => ({
     playerCount: s.playerCount + 1,
   })),
 
-  setMyCard: (card) => set({
-    myCard:      card,
-    markedCells: [[2, 2]],
+  setMyCard: (card) => set((s) => {
+    const existing = s.myCards.find(c => c.cardNumber === card.cardNumber);
+    if (existing) return s; // already have this card
+    const newCards = [...s.myCards, { ...card, markedCells: [[2, 2]] }];
+    return {
+      myCards:     newCards,
+      myCard:      newCards[0], // first card for backward compat
+      markedCells: [[2, 2]],
+    };
   }),
 
-  toggleMark: (row, col) => set((s) => {
+  toggleMark: (row, col, cardNumber) => set((s) => {
     if (row === 2 && col === 2) return s;
-    const exists = s.markedCells.some(([r, c]) => r === row && c === col);
-    const markedCells = exists
-      ? s.markedCells.filter(([r, c]) => !(r === row && c === col))
-      : [...s.markedCells, [row, col]];
-    return { markedCells };
+    // Find which card to mark
+    const cardIdx = cardNumber !== undefined
+      ? s.myCards.findIndex(c => c.cardNumber === cardNumber)
+      : 0;
+    if (cardIdx === -1) return s;
+
+    const card = s.myCards[cardIdx];
+    const exists = card.markedCells.some(([r, c]) => r === row && c === col);
+    const newMarked = exists
+      ? card.markedCells.filter(([r, c]) => !(r === row && c === col))
+      : [...card.markedCells, [row, col]];
+
+    const newCards = s.myCards.map((c, i) =>
+      i === cardIdx ? { ...c, markedCells: newMarked } : c
+    );
+    return {
+      myCards:     newCards,
+      myCard:      newCards[0],
+      markedCells: newCards[0]?.markedCells || [[2, 2]],
+    };
   }),
 
   setWatcher: (v) => set({ isWatcher: v }),
@@ -173,14 +196,15 @@ export const useGameStore = create((set, get) => ({
     gameId:          snap.gameId,
     gameCode:        snap.gameCode,
     elapsed:         0,
-    remaining:       snap.remaining || 135,
+    remaining:       snap.remaining || 115,
     balls:           [],
     latestBall:      null,
     takenCards:      {},
     playerCount:     0,
     prizePool:       0,
-    netPrize:        snap.netPrize || snap.minPrize || 0,
+    netPrize:        snap.netPrize || 0,
     entryFee:        snap.entryFee || 10,
+    myCards:         [],
     myCard:          null,
     markedCells:     [[2, 2]],
     isWatcher:       false,

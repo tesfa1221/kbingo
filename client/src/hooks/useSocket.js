@@ -72,12 +72,14 @@ function attachListeners(socket) {
   socket.on('card:select_result', (result) => {
     if (result.ok) {
       getStore().setMyCard({ cardNumber: result.cardNumber, grid: result.grid });
-      const { user, entryFee } = getStore();
+      const { user, entryFee, myCards } = getStore();
       if (user) getStore().updateBalance(parseFloat(user.balance) - (entryFee || 10));
-      toast.success(`ካርድ #${result.cardNumber} ተመርጧል!`);
+      const cardNum = myCards.length;
+      toast.success(`ካርድ #${result.cardNumber} ተመርጧል! ${cardNum >= 2 ? '(2/2)' : '(1/2)'}`);
     } else {
       const msgs = {
         CARD_TAKEN:           'ይህ ካርድ ተወስዷል',
+        MAX_CARDS_REACHED:    'ቢያንስ 2 ካርዶች ብቻ ይፈቀዳሉ',
         ALREADY_REGISTERED:   'ካርድ አስቀድሞ ተመርጧል',
         INSUFFICIENT_BALANCE: 'በቂ ሂሳብ የለም',
         USER_BANNED:          'ታግደዋል',

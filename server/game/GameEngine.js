@@ -93,17 +93,25 @@ class GameEngine {
       takenCards:  this.takenCards,
       prizePool:   this.prizePool,
       netPrize:    this.netPrize,
-      playerCount: Object.keys(this.tickets).length,
+      playerCount:      new Set(Object.values(this.tickets).map(t => t.userId)).size,
+      realPlayerCount:  new Set(
+        Object.values(this.tickets)
+          .filter(t => !this._botUserIds?.has(t.userId))
+          .map(t => t.userId)
+      ).size,
       entryFee:    this.entryFee,
     };
   }
 
-  // ─── Card Selection ──────────────────────────────────────
+  // ─── Card Selection (allows up to 2 cards per user) ─────
   async selectCard(userId, cardNumber) {
     if (this.state !== 'REGISTRATION') return { ok: false, reason: 'REGISTRATION_CLOSED' };
     if (cardNumber < 1 || cardNumber > 100) return { ok: false, reason: 'INVALID_CARD' };
     if (this.takenCards[cardNumber]) return { ok: false, reason: 'CARD_TAKEN' };
-    if (this.tickets[userId]) return { ok: false, reason: 'ALREADY_REGISTERED' };
+
+    // Count how many cards this user already has (max 2)
+    const userCardCount = Object.keys(this.tickets).filter(key => key.startsWith(`${userId}_`)).length;
+    if (userCardCount >= 2) return { ok: false, reason: 'MAX_CARDS_REACHED' };
 
     const [rows] = await db.query('SELECT balance, is_banned, ban_expires_at, is_bot FROM users WHERE id=?', [userId]);
     if (!rows.length) return { ok: false, reason: 'USER_NOT_FOUND' };
@@ -142,7 +150,12 @@ class GameEngine {
     conn.release();
 
     this.takenCards[cardNumber] = userId;
-    this.tickets[userId] = { cardNumber, grid };
+    this.tickets[`${userId}_${cardNumber}`] = { userId, cardNumber, grid };
+    // Track if this is a bot ticket
+    if (rows[0]?.is_bot) {
+      if (!this._botUserIds) this._botUserIds = new Set();
+      this._botUserIds.add(userId);
+    }
     this.prizePool += this.entryFee;
     this.netPrize = this.prizePool * (1 - HOUSE_FEE_PCT / 100);
 
@@ -155,20 +168,28 @@ class GameEngine {
   async claimBingo(userId) {
     if (this.state !== 'ACTIVE')    return { ok: false, reason: 'GAME_NOT_ACTIVE' };
     if (this.roundFinished)         return { ok: false, reason: 'ROUND_FINISHED' };
-    const ticket = this.tickets[userId];
-    if (!ticket)                    return { ok: false, reason: 'NO_TICKET' };
+
+    // Find all tickets for this user
+    const userTickets = Object.entries(this.tickets)
+      .filter(([key]) => key.startsWith(`${userId}_`))
+      .map(([, ticket]) => ticket);
+
+    if (!userTickets.length) return { ok: false, reason: 'NO_TICKET' };
 
     const drawnSet = new Set(this.balls);
-    const { valid, pattern } = validateBingo(ticket.grid, drawnSet);
-    if (!valid) {
-      // No penalty — just tell the user their line isn't complete
-      return { ok: false, reason: 'INCOMPLETE_LINE' };
+
+    // Check each card — win if ANY card has a valid line
+    for (const ticket of userTickets) {
+      const { valid, pattern } = validateBingo(ticket.grid, drawnSet);
+      if (valid) {
+        this.winners.push({ userId, pattern, winningBall: this.balls[this.balls.length - 1], cardNumber: ticket.cardNumber });
+        this.roundFinished = true;
+        await this._finalizeWinners();
+        return { ok: true, pattern };
+      }
     }
 
-    this.winners.push({ userId, pattern, winningBall: this.balls[this.balls.length - 1] });
-    this.roundFinished = true;
-    await this._finalizeWinners();
-    return { ok: true, pattern };
+    return { ok: false, reason: 'INCOMPLETE_LINE' };
   }
 
   // ─── Private ─────────────────────────────────────────────
@@ -200,6 +221,7 @@ class GameEngine {
     this.netPrize      = 0;
     this.winners       = [];
     this.roundFinished = false;
+    this._botUserIds   = new Set();
     this.botManager.reset();
 
     try {
@@ -250,7 +272,7 @@ class GameEngine {
     this._ballTimer = null;
 
     const winnerCount  = this.winners.length;
-    const playerCount  = Object.keys(this.tickets).length;
+    const playerCount  = new Set(Object.values(this.tickets).map(t => t.userId)).size;
 
     // If only 1 player — full refund, no house fee, no prize
     if (playerCount <= 1 && winnerCount > 0) {
@@ -258,7 +280,7 @@ class GameEngine {
       try {
         const conn = await db.getConnection();
         await conn.beginTransaction();
-        const [tRows] = await conn.query('SELECT id FROM tickets WHERE game_id=? AND user_id=?', [this.gameId, userId]);
+        const [tRows] = await conn.query('SELECT id FROM tickets WHERE game_id=? AND user_id=? LIMIT 1', [this.gameId, userId]);
         const ticketId = tRows[0]?.id;
         await conn.query('UPDATE tickets SET is_winner=1, prize_share=? WHERE id=?', [this.entryFee, ticketId]);
         const [uRows] = await conn.query('SELECT balance FROM users WHERE id=?', [userId]);
@@ -306,7 +328,7 @@ class GameEngine {
       await conn.beginTransaction();
       for (const w of this.winners) {
         const { userId, pattern, winningBall } = w;
-        const [tRows] = await conn.query('SELECT id FROM tickets WHERE game_id=? AND user_id=?', [this.gameId, userId]);
+        const [tRows] = await conn.query('SELECT id FROM tickets WHERE game_id=? AND user_id=? AND card_number=?', [this.gameId, userId, w.cardNumber]);
         const ticketId = tRows[0]?.id;
         await conn.query('UPDATE tickets SET is_winner=1, prize_share=? WHERE id=?', [share, ticketId]);
         const [uRows] = await conn.query('SELECT balance FROM users WHERE id=?', [userId]);

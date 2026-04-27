@@ -27,7 +27,7 @@ function getCardCol(num) {
 }
 
 export default function CardGrid() {
-  const { takenCards, gameState, user, myCard } = useGameStore();
+  const { takenCards, gameState, user, myCards } = useGameStore();
   const [previewCard, setPreviewCard]     = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(null);
 
@@ -57,13 +57,21 @@ export default function CardGrid() {
     setPreviewCard(null);
   }, [previewCard]);
 
-  if (myCard) return null;
+  if (myCards && myCards.length >= 2) return null;
+  const hasOneCard = myCards && myCards.length === 1;
 
   return (
     <div className="glass rounded-2xl p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-gold font-bold text-sm font-amharic">ካርድ ምረጥ</h2>
+        <div>
+          <h2 className="text-gold font-bold text-sm font-amharic">
+            {hasOneCard ? '2ኛ ካርድ ምረጥ (አማራጭ)' : 'ካርድ ምረጥ'}
+          </h2>
+          {hasOneCard && (
+            <p className="text-muted text-[10px] font-amharic">1 ካርድ አለህ — ሌላ ካርድ ጨምር ወይም ጨዋታ ጠብቅ</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {isRegistration && (
             <span className="text-muted text-xs">
