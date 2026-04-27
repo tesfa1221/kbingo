@@ -52,7 +52,8 @@ export default function Header() {
   const isActive = gameState === 'ACTIVE';
   const regSecsLeft = Math.max(0, remaining - (TOTAL - 60));
   const timerColor  = remaining <= 10 ? '#FF4444' : isActive ? '#D4AF37' : '#39FF14';
-  const progress    = Math.min(100, ((TOTAL - remaining) / TOTAL) * 100);
+  // Bar DECREASES — starts full, drains as time runs out
+  const progress    = Math.max(0, (remaining / TOTAL) * 100);
 
   return (
     <header className="sticky top-0 z-40 bg-charcoal/95 backdrop-blur-md border-b border-white/5">

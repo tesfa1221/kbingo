@@ -29,23 +29,28 @@ export default function BallDisplay() {
 
   // ── Registration phase ────────────────────────────────
   if (gameState === 'REGISTRATION') {
-    // regDuration is 45s — bar fills left→right as time passes
     const REG_DURATION = 45;
     const regElapsed   = Math.min(elapsed, REG_DURATION);
     const regRemaining = Math.max(0, REG_DURATION - regElapsed);
-    const pct          = Math.min(100, (regElapsed / REG_DURATION) * 100);
+    // Bar DECREASES — starts full, drains to 0 as time runs out
+    const pct = Math.max(0, ((REG_DURATION - regElapsed) / REG_DURATION) * 100);
+    const isUrgent = regRemaining <= 10;
 
     return (
-      <div className="glass rounded-2xl p-4 border border-neon/20">
+      <div className={`glass rounded-2xl p-4 border ${isUrgent ? 'border-danger/40' : 'border-neon/20'}`}>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-neon font-black text-sm font-amharic">📝 ምዝገባ ክፍት ነው</p>
-          <span className="text-neon font-mono font-bold text-sm">{regRemaining}s</span>
+          <p className={`font-black text-sm font-amharic ${isUrgent ? 'text-danger' : 'text-neon'}`}>
+            📝 ምዝገባ ክፍት ነው
+          </p>
+          <span className={`font-mono font-bold text-sm ${isUrgent ? 'text-danger animate-pulse' : 'text-neon'}`}>
+            {regRemaining}s
+          </span>
         </div>
 
-        {/* Registration progress bar */}
+        {/* Registration progress bar — decreasing countdown */}
         <div className="h-1.5 bg-surface2 rounded-full overflow-hidden mb-3">
           <motion.div
-            className="h-full bg-neon rounded-full"
+            className={`h-full rounded-full ${isUrgent ? 'bg-danger' : 'bg-neon'}`}
             style={{ width: `${pct}%`, transition: 'width 1s linear' }}
           />
         </div>

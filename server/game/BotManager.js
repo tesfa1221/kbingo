@@ -13,8 +13,9 @@
 const db = require('../db/connection');
 const { validateBingo } = require('../utils/bingoValidator');
 
-const TARGET_PLAYERS = 4;   // fill up to this many total players
-const BOT_JOIN_AT    = 25;  // second in registration phase to join
+const TARGET_MIN_PLAYERS = 3;   // minimum total players
+const TARGET_MAX_PLAYERS = 6;   // maximum total players
+const BOT_JOIN_AT        = 25;  // second in registration phase to join
 const MIN_BALLS_BEFORE_CLAIM = 15;  // bots wait at least this many balls
 const MAX_BALLS_BEFORE_CLAIM = 30;  // bots claim by this ball at latest
 
@@ -72,7 +73,9 @@ class BotManager {
 
     const engine       = this.engine;
     const realPlayers  = Object.keys(engine.tickets).length;
-    const botsNeeded   = Math.max(0, TARGET_PLAYERS - realPlayers);
+    // Random target between 3 and 6
+    const target       = TARGET_MIN_PLAYERS + Math.floor(Math.random() * (TARGET_MAX_PLAYERS - TARGET_MIN_PLAYERS + 1));
+    const botsNeeded   = Math.max(0, target - realPlayers);
 
     if (botsNeeded === 0) {
       console.log(`🤖 [${engine.roomId}] No bots needed (${realPlayers} real players)`);

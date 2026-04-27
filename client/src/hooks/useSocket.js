@@ -12,6 +12,8 @@ function attachListeners(socket) {
 
   socket.on('connect', () => {
     console.log('🔌 Socket connected:', socket.id);
+    // Inject auto-BINGO claim function into store
+    getStore().setClaimBingo(() => socket.emit('bingo:claim'));
     // Request all room data
     socket.emit('rooms:list');
   });

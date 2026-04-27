@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { validateBingo } from '../utils/bingoValidator';
 
 // Persist some settings to localStorage
 const savedAutoMark   = localStorage.getItem('bingo_automark') === 'true';
@@ -50,6 +51,10 @@ export const useGameStore = create((set, get) => ({
   // ── Settings ────────────────────────────────────────────
   autoMark: savedAutoMark,   // auto-mark drawn numbers on card
   audioOn:  savedAudioOn,    // sound on/off
+
+  // Socket claim fn — injected by useSocket after connect
+  _claimBingo: null,
+  setClaimBingo: (fn) => set({ _claimBingo: fn }),
 
   setAutoMark: (v) => {
     localStorage.setItem('bingo_automark', v);
@@ -116,6 +121,21 @@ export const useGameStore = create((set, get) => ({
     }
 
     set({ balls: newBalls, latestBall: ball, markedCells: newMarked });
+
+    // Auto-BINGO: if auto-mark is ON, check for a winning line after marking
+    if (s.autoMark && s.myCard && s.gameState === 'ACTIVE') {
+      const drawnSet = new Set(newBalls);
+      const { valid } = validateBingo(s.myCard.grid, drawnSet);
+      if (valid) {
+        setTimeout(() => {
+          const { _claimBingo, showCelebration, gameState } = get();
+          if (_claimBingo && !showCelebration && gameState === 'ACTIVE') {
+            _claimBingo();
+            console.log('🎯 Auto-BINGO claimed!');
+          }
+        }, 300);
+      }
+    }
   },
 
   lockCard: (cardNumber, userId) => set((s) => ({
