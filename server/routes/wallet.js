@@ -266,6 +266,12 @@ router.post('/admin/approve/:id', requireAuth, requireAdmin, async (req, res) =>
     );
 
     await conn.commit();
+    // Notify user via Telegram
+    try {
+      const { notifyDepositApproved } = require('../telegram/bot');
+      const [uInfo] = await db.query('SELECT telegram_id, first_name FROM users WHERE id=?', [tx.user_id]);
+      if (uInfo[0]?.telegram_id) notifyDepositApproved(uInfo[0].telegram_id, uInfo[0].first_name, tx.amount).catch(() => {});
+    } catch {}
     res.json({ message: 'Deposit approved', newBalance: balAfter });
   } catch (err) {
     await conn.rollback();
@@ -287,6 +293,15 @@ router.post('/admin/reject/:id', requireAuth, requireAdmin, async (req, res) => 
     );
 
     if (!result.affectedRows) return res.status(404).json({ error: 'Not found' });
+    // Notify user via Telegram
+    try {
+      const { notifyDepositRejected } = require('../telegram/bot');
+      const [txInfo] = await db.query('SELECT user_id, amount FROM transactions WHERE id=?', [txId]);
+      if (txInfo[0]) {
+        const [uInfo] = await db.query('SELECT telegram_id, first_name FROM users WHERE id=?', [txInfo[0].user_id]);
+        if (uInfo[0]?.telegram_id) notifyDepositRejected(uInfo[0].telegram_id, uInfo[0].first_name, txInfo[0].amount).catch(() => {});
+      }
+    } catch {}
     res.json({ message: 'Deposit rejected' });
   } catch (err) {
     res.status(500).json({ error: 'DB error' });

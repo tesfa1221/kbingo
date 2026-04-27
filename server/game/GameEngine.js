@@ -231,6 +231,12 @@ class GameEngine {
     this.io.to(this.roomId).emit('game:new_round', this.getSnapshot());
     console.log(`🎮 [${this.roomId}] New round: ${gameCode} | fee=${this.entryFee} ETB | minPrize=${this.minPrize} ETB`);
 
+    // Notify Telegram users about new round (only standard room, not every round)
+    if (this.roomId === 'standard') {
+      const { notifyNewRound } = require('../telegram/bot');
+      notifyNewRound(this.roomId, this.entryFee, this.entryFee * 4).catch(() => {});
+    }
+
     this._timer = setInterval(() => this._tick(), 1000);
   }
 
@@ -358,7 +364,12 @@ class GameEngine {
 
     const winnersWithNames = await Promise.all(this.winners.map(async (w) => {
       try {
-        const [rows] = await db.query('SELECT first_name, username FROM users WHERE id=?', [w.userId]);
+        const [rows] = await db.query('SELECT first_name, username, telegram_id FROM users WHERE id=?', [w.userId]);
+        // Notify winner via Telegram
+        if (rows[0]?.telegram_id) {
+          const { notifyWinner } = require('../telegram/bot');
+          notifyWinner(rows[0].telegram_id, rows[0].first_name, share, w.pattern).catch(() => {});
+        }
         return { ...w, firstName: rows[0]?.first_name || null, username: rows[0]?.username || null };
       } catch { return { ...w, firstName: null, username: null }; }
     }));

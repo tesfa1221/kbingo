@@ -14,6 +14,7 @@ const authRoutes                        = require('./routes/auth');
 const { router: gameRoutes, setEngines } = require('./routes/game');
 const walletRoutes                      = require('./routes/wallet');
 const settingsRoutes                    = require('./routes/settings');
+const telegramBot                       = require('./telegram/bot');
 
 process.on('uncaughtException',  (err)    => console.error('❌ Uncaught Exception:', err.message));
 process.on('unhandledRejection', (reason) => console.error('❌ Unhandled Rejection:', reason?.message || reason));
@@ -60,6 +61,13 @@ app.use('/api/auth',     authRoutes);
 app.use('/api/game',     gameRoutes);
 app.use('/api/wallet',   walletRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// ─── Telegram webhook ─────────────────────────────────────
+app.post('/telegram/webhook', express.json(), async (req, res) => {
+  res.sendStatus(200); // always respond fast
+  try { await telegramBot.handleUpdate(req.body); } catch(e) { console.error('Webhook error:', e.message); }
+});
+
 app.get('/health', (_, res) => res.json({ status: 'ok', rooms: Object.keys(engines) }));
 
 // ─── Game Engines (one per room) ─────────────────────────
@@ -225,6 +233,26 @@ server.listen(PORT, async () => {
     console.log(`🤖 ${botRows[0].cnt} bots ready`);
   } catch(e) {
     console.error('Bot seed error (non-fatal):', e.message);
+  }
+
+  // Set Telegram webhook
+  if (process.env.TELEGRAM_BOT_TOKEN && process.env.RENDER_EXTERNAL_URL) {
+    const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/telegram/webhook`;
+    const https = require('https');
+    const body  = JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
+    const req   = https.request({
+      hostname: 'api.telegram.org',
+      path:     `/bot${process.env.TELEGRAM_BOT_TOKEN}/setWebhook`,
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    }, res => {
+      let d = ''; res.on('data', c => d += c);
+      res.on('end', () => {
+        const r = JSON.parse(d);
+        console.log(`🤖 Telegram webhook: ${r.ok ? '✅ ' + webhookUrl : '❌ ' + r.description}`);
+      });
+    });
+    req.write(body); req.end();
   }
 
   Object.values(engines).forEach(e => e.start());
