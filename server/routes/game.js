@@ -69,29 +69,47 @@ router.post('/bingo', requireAuth, async (req, res) => {
   res.json(result);
 });
 
-// GET /api/game/leaderboard
+// GET /api/game/leaderboard — real players only, no bots
 router.get('/leaderboard', async (req, res) => {
   const db = require('../db/connection');
   try {
-    const [rows] = await db.query('SELECT * FROM weekly_leaderboard');
+    const [rows] = await db.query(`
+      SELECT u.id, u.first_name, u.username, u.photo_url,
+             COUNT(w.id)        AS wins_this_week,
+             SUM(w.prize_share) AS earnings_this_week
+      FROM users u
+      JOIN winners w ON w.user_id = u.id
+      WHERE w.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        AND u.is_bot = 0
+      GROUP BY u.id
+      ORDER BY earnings_this_week DESC
+      LIMIT 20
+    `);
     res.json({ leaderboard: rows });
   } catch (err) { res.status(500).json({ error: 'DB error' }); }
 });
 
-// GET /api/game/history
+// GET /api/game/history — show real winners only (hide bots)
 router.get('/history', async (req, res) => {
   const db = require('../db/connection');
   try {
     const [games] = await db.query(
       `SELECT g.id, g.game_code, g.room_id, g.prize_pool, g.net_prize, g.winning_pattern,
-              g.finished_at, g.entry_fee, COUNT(DISTINCT t.user_id) as player_count
-       FROM games g LEFT JOIN tickets t ON t.game_id=g.id
-       WHERE g.state='FINISHED' GROUP BY g.id ORDER BY g.finished_at DESC LIMIT 20`
+              g.finished_at, g.entry_fee,
+              COUNT(DISTINCT CASE WHEN u.is_bot=0 THEN t.user_id END) as player_count
+       FROM games g
+       LEFT JOIN tickets t ON t.game_id=g.id
+       LEFT JOIN users u ON u.id=t.user_id
+       WHERE g.state='FINISHED'
+       GROUP BY g.id ORDER BY g.finished_at DESC LIMIT 20`
     );
     const history = await Promise.all(games.map(async (g) => {
+      // Only show real player winners
       const [winners] = await db.query(
         `SELECT w.prize_share, w.pattern, w.winning_ball, u.first_name, u.username, u.id as user_id
-         FROM winners w JOIN users u ON u.id=w.user_id WHERE w.game_id=?`, [g.id]
+         FROM winners w
+         JOIN users u ON u.id=w.user_id
+         WHERE w.game_id=? AND u.is_bot=0`, [g.id]
       );
       return { ...g, winners };
     }));

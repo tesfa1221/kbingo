@@ -431,6 +431,62 @@ router.post('/admin/unban/:id', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Bot Management Routes ────────────────────────────────
+
+// GET /api/wallet/admin/bots — List all bots
+router.get('/admin/bots', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, username, first_name, balance, total_wins, created_at
+       FROM users WHERE is_bot=1 ORDER BY created_at ASC`
+    );
+    res.json({ bots: rows });
+  } catch (err) { res.status(500).json({ error: 'DB error' }); }
+});
+
+// POST /api/wallet/admin/bots — Add a new bot
+router.post('/admin/bots', requireAuth, requireAdmin, async (req, res) => {
+  const firstName = (req.body.firstName || '').toString().trim();
+  const balance   = parseFloat(req.body.balance) || 500;
+
+  if (!firstName || firstName.length < 2) {
+    return res.status(400).json({ error: 'First name required (min 2 chars)' });
+  }
+
+  const bcrypt   = require('bcryptjs');
+  const hash     = await bcrypt.hash('bot_secret_2024', 10);
+  const username = firstName.toLowerCase().replace(/\s+/g, '_') + '_bot_' + Date.now().toString(36);
+  const refCode  = username.toUpperCase().slice(0, 8);
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO users (username, first_name, is_bot, balance, password_hash, referral_code)
+       VALUES (?, ?, 1, ?, ?, ?)`,
+      [username, firstName, balance, hash, refCode]
+    );
+    const [rows] = await db.query('SELECT id, username, first_name, balance FROM users WHERE id=?', [result.insertId]);
+    res.status(201).json({ message: 'Bot created', bot: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'DB error: ' + err.message });
+  }
+});
+
+// DELETE /api/wallet/admin/bots/:id — Delete a bot
+router.delete('/admin/bots/:id', requireAuth, requireAdmin, async (req, res) => {
+  const botId = parseInt(req.params.id);
+  try {
+    // Verify it's actually a bot
+    const [rows] = await db.query('SELECT id, is_bot FROM users WHERE id=?', [botId]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    if (!rows[0].is_bot) return res.status(400).json({ error: 'User is not a bot' });
+
+    await db.query('DELETE FROM users WHERE id=? AND is_bot=1', [botId]);
+    res.json({ message: 'Bot deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'DB error: ' + err.message });
+  }
+});
+
 // POST /api/wallet/admin/topup/:id — Add balance to a user
 router.post('/admin/topup/:id', requireAuth, requireAdmin, async (req, res) => {
   const userId = parseInt(req.params.id);

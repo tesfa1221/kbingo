@@ -27,6 +27,111 @@ function Dashboard({ stats }) {
   );
 }
 
+// ─── Bots Tab ─────────────────────────────────────────────
+function BotsTab({ bots, onRefresh }) {
+  const [newName, setNewName]     = useState('');
+  const [newBal, setNewBal]       = useState('500');
+  const [adding, setAdding]       = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const addBot = async (e) => {
+    e.preventDefault();
+    if (!newName.trim()) return toast.error('ስም ያስፈልጋል');
+    setAdding(true);
+    try {
+      await api.post('/wallet/admin/bots', { firstName: newName.trim(), balance: parseFloat(newBal) || 500 });
+      toast.success(`${newName} ቦት ተጨምሯል`);
+      setNewName('');
+      setNewBal('500');
+      onRefresh();
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setAdding(false); }
+  };
+
+  const deleteBot = async (bot) => {
+    if (!window.confirm(`${bot.first_name} ቦትን ይሰርዙ?`)) return;
+    setDeletingId(bot.id);
+    try {
+      await api.delete(`/wallet/admin/bots/${bot.id}`);
+      toast.success(`${bot.first_name} ተሰርዟል`);
+      onRefresh();
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setDeletingId(null); }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Add bot form */}
+      <div className="glass rounded-2xl p-4 border border-neon/20">
+        <p className="text-neon font-bold text-sm font-amharic mb-3">➕ አዲስ ቦት ጨምር</p>
+        <form onSubmit={addBot} className="flex flex-col gap-3">
+          <input
+            type="text"
+            placeholder="የቦቱ ስም (ለምሳሌ: Kebede)"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            className="bg-surface2 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-muted focus:outline-none focus:border-neon/50"
+          />
+          <div className="flex gap-2">
+            <input
+              type="number"
+              placeholder="ሂሳብ (ETB)"
+              value={newBal}
+              onChange={e => setNewBal(e.target.value)}
+              className="flex-1 bg-surface2 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-muted focus:outline-none focus:border-neon/50"
+            />
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              type="submit"
+              disabled={adding}
+              className="px-5 py-2.5 rounded-xl bg-neon text-charcoal font-black disabled:opacity-50"
+            >
+              {adding ? '...' : 'ጨምር'}
+            </motion.button>
+          </div>
+        </form>
+      </div>
+
+      {/* Bot list */}
+      <div className="flex flex-col gap-2">
+        <p className="text-muted text-xs font-amharic">{bots.length} ቦቶች</p>
+        {bots.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-4xl mb-2">🤖</p>
+            <p className="text-muted font-amharic text-sm">ምንም ቦት የለም</p>
+          </div>
+        )}
+        {bots.map(bot => (
+          <motion.div
+            key={bot.id}
+            layout
+            className="glass rounded-xl p-3 border border-white/5 flex items-center gap-3"
+          >
+            <div className="w-10 h-10 rounded-full bg-neon/10 border border-neon/30 flex items-center justify-center text-neon font-black text-sm shrink-0">
+              🤖
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-semibold text-sm">{bot.first_name}</p>
+              <p className="text-muted text-xs">@{bot.username} · {bot.total_wins} wins</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-neon font-bold text-sm">{parseFloat(bot.balance).toFixed(0)} ETB</p>
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => deleteBot(bot)}
+              disabled={deletingId === bot.id}
+              className="ml-1 w-8 h-8 rounded-lg bg-danger/20 text-danger border border-danger/30 flex items-center justify-center text-sm disabled:opacity-50 shrink-0"
+            >
+              {deletingId === bot.id ? '...' : '✕'}
+            </motion.button>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Entry Fee Settings ───────────────────────────────────
 function EntryFeeSettings() {
   const { entryFee } = useGameStore();
@@ -74,6 +179,7 @@ export default function AdminPanel() {
   const [withdrawals, setWithdrawals] = useState([]);
   const [users, setUsers]             = useState([]);
   const [allTx, setAllTx]             = useState([]);
+  const [bots, setBots]               = useState([]);
   const [stats, setStats]             = useState(null);
   const [tab, setTab]                 = useState('overview');
   const [loading, setLoading]         = useState(true);
@@ -92,19 +198,21 @@ export default function AdminPanel() {
       api.get('/wallet/admin/users'),
       api.get('/wallet/admin/withdrawals'),
       api.get('/wallet/admin/all-transactions'),
-    ]).then(([p, u, w, tx]) => {
+      api.get('/wallet/admin/bots'),
+    ]).then(([p, u, w, tx, b]) => {
       const pendingList = p.pending || [];
       const userList    = u.users   || [];
       const wList       = w.withdrawals || [];
       const txList      = tx.transactions || [];
+      const botList     = b.bots || [];
       setPending(pendingList);
       setUsers(userList);
       setWithdrawals(wList);
       setAllTx(txList);
-      // Compute dashboard stats
+      setBots(botList);
       setStats({
         totalUsers:          userList.length,
-        todayGames:          0, // filled from history if needed
+        todayGames:          0,
         totalPaid:           userList.reduce((s, u) => s + parseFloat(u.total_winnings || 0), 0),
         totalBalance:        userList.reduce((s, u) => s + parseFloat(u.balance || 0), 0),
         pendingDeposits:     pendingList.length,
@@ -177,6 +285,7 @@ export default function AdminPanel() {
     { key: 'withdrawals',  label: `ወጪ${withdrawals.length ? ` (${withdrawals.length})` : ''}` },
     { key: 'transactions', label: 'ግብይቶች' },
     { key: 'users',        label: 'ተጠቃሚ' },
+    { key: 'bots',         label: `🤖 ቦቶች` },
     { key: 'settings',     label: 'ቅንብር' },
   ];
 
@@ -482,6 +591,9 @@ export default function AdminPanel() {
               ))}
             </div>
           )}
+
+          {/* ── Bots ── */}
+          {tab === 'bots' && <BotsTab bots={bots} onRefresh={load} />}
 
           {/* ── Settings ── */}
           {tab === 'settings' && <EntryFeeSettings />}
