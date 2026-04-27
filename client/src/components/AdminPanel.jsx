@@ -27,6 +27,168 @@ function Dashboard({ stats }) {
   );
 }
 
+// ─── Promos Tab ───────────────────────────────────────────
+function PromosTab({ promos, onRefresh }) {
+  const [newText, setNewText]       = useState('');
+  const [editId, setEditId]         = useState(null);
+  const [editText, setEditText]     = useState('');
+  const [adding, setAdding]         = useState(false);
+  const [actionId, setActionId]     = useState(null);
+
+  const addPromo = async (e) => {
+    e.preventDefault();
+    if (!newText.trim()) return toast.error('ጽሑፍ ያስፈልጋል');
+    setAdding(true);
+    try {
+      await api.post('/settings/promos', { text_body: newText.trim() });
+      toast.success('ፕሮሞ ተጨምሯል ✅');
+      setNewText('');
+      onRefresh();
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setAdding(false); }
+  };
+
+  const saveEdit = async (id) => {
+    if (!editText.trim()) return toast.error('ጽሑፍ ያስፈልጋል');
+    setActionId(`edit-${id}`);
+    try {
+      await api.put(`/settings/promos/${id}`, { text_body: editText.trim() });
+      toast.success('ተቀይሯል ✅');
+      setEditId(null);
+      onRefresh();
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setActionId(null); }
+  };
+
+  const deletePromo = async (id) => {
+    if (!window.confirm('ይሰርዙ?')) return;
+    setActionId(`del-${id}`);
+    try {
+      await api.delete(`/settings/promos/${id}`);
+      toast.success('ተሰርዟል');
+      onRefresh();
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setActionId(null); }
+  };
+
+  const sendNow = async (id) => {
+    setActionId(`send-${id}`);
+    try {
+      const r = await api.post('/settings/promos/send-now', { id });
+      toast.success(r.message);
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setActionId(null); }
+  };
+
+  const toggleActive = async (promo) => {
+    setActionId(`toggle-${promo.id}`);
+    try {
+      await api.put(`/settings/promos/${promo.id}`, { text_body: promo.text_body, is_active: !promo.is_active });
+      onRefresh();
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setActionId(null); }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Add new promo */}
+      <div className="glass rounded-2xl p-4 border border-neon/20">
+        <p className="text-neon font-bold text-sm font-amharic mb-3">➕ አዲስ ፕሮሞ ጨምር</p>
+        <form onSubmit={addPromo} className="flex flex-col gap-2">
+          <textarea
+            value={newText}
+            onChange={e => setNewText(e.target.value)}
+            placeholder={'ፕሮሞ ጽሑፍ ያስገቡ...\n\nምሳሌ: 🎮 *K Bingo ጫወት!*\n\n💰 10 ETB → 80 ETB+ 👇'}
+            rows={4}
+            className="w-full bg-surface2 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm placeholder-muted focus:outline-none focus:border-neon/50 resize-none font-amharic"
+          />
+          <p className="text-muted text-[10px]">*bold* ለ굵은 ጽሑፍ · \n ለ አዲስ መስመር</p>
+          <motion.button whileTap={{ scale: 0.97 }} type="submit" disabled={adding}
+            className="py-2.5 rounded-xl bg-neon text-charcoal font-black disabled:opacity-50">
+            {adding ? '...' : '+ ጨምር'}
+          </motion.button>
+        </form>
+      </div>
+
+      {/* Promo list */}
+      <div className="flex flex-col gap-3">
+        <p className="text-muted text-xs">{promos.length} ፕሮሞዎች</p>
+        {promos.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-4xl mb-2">📢</p>
+            <p className="text-muted font-amharic text-sm">ምንም ፕሮሞ የለም</p>
+          </div>
+        )}
+        {promos.map(promo => (
+          <motion.div key={promo.id} layout
+            className={`glass rounded-xl border p-3 ${promo.is_active ? 'border-neon/20' : 'border-white/5 opacity-60'}`}>
+
+            {editId === promo.id ? (
+              /* Edit mode */
+              <div className="flex flex-col gap-2">
+                <textarea
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  rows={4}
+                  className="w-full bg-surface2 border border-neon/30 rounded-xl px-3 py-2 text-white text-sm focus:outline-none resize-none"
+                />
+                <div className="flex gap-2">
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => saveEdit(promo.id)}
+                    disabled={actionId === `edit-${promo.id}`}
+                    className="flex-1 py-2 rounded-xl bg-neon text-charcoal font-bold text-sm disabled:opacity-50">
+                    {actionId === `edit-${promo.id}` ? '...' : '💾 አስቀምጥ'}
+                  </motion.button>
+                  <button onClick={() => setEditId(null)}
+                    className="px-4 py-2 rounded-xl border border-white/10 text-muted text-sm">
+                    ሰርዝ
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* View mode */
+              <>
+                <p className="text-white text-xs leading-relaxed mb-3 font-amharic whitespace-pre-wrap">
+                  {promo.text_body}
+                </p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {/* Send now */}
+                  <motion.button whileTap={{ scale: 0.9 }}
+                    onClick={() => sendNow(promo.id)}
+                    disabled={actionId === `send-${promo.id}` || !promo.is_active}
+                    className="px-2.5 py-1.5 rounded-lg bg-neon/20 text-neon border border-neon/30 text-[10px] font-bold disabled:opacity-40">
+                    {actionId === `send-${promo.id}` ? '...' : '📤 አሁን ላክ'}
+                  </motion.button>
+                  {/* Edit */}
+                  <motion.button whileTap={{ scale: 0.9 }}
+                    onClick={() => { setEditId(promo.id); setEditText(promo.text_body); }}
+                    className="px-2.5 py-1.5 rounded-lg bg-gold/20 text-gold border border-gold/30 text-[10px] font-bold">
+                    ✏️ ቀይር
+                  </motion.button>
+                  {/* Toggle active */}
+                  <motion.button whileTap={{ scale: 0.9 }}
+                    onClick={() => toggleActive(promo)}
+                    disabled={actionId === `toggle-${promo.id}`}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border disabled:opacity-50
+                      ${promo.is_active ? 'bg-surface2 text-muted border-white/10' : 'bg-neon/10 text-neon border-neon/20'}`}>
+                    {promo.is_active ? '⏸ አቁም' : '▶ አንቃ'}
+                  </motion.button>
+                  {/* Delete */}
+                  <motion.button whileTap={{ scale: 0.9 }}
+                    onClick={() => deletePromo(promo.id)}
+                    disabled={actionId === `del-${promo.id}`}
+                    className="px-2.5 py-1.5 rounded-lg bg-danger/20 text-danger border border-danger/30 text-[10px] font-bold disabled:opacity-50">
+                    {actionId === `del-${promo.id}` ? '...' : '🗑 ሰርዝ'}
+                  </motion.button>
+                </div>
+              </>
+            )}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Bots Tab ─────────────────────────────────────────────
 function BotsTab({ bots, onRefresh }) {
   const [newName, setNewName]     = useState('');
@@ -363,6 +525,7 @@ export default function AdminPanel() {
   const [users, setUsers]             = useState([]);
   const [allTx, setAllTx]             = useState([]);
   const [bots, setBots]               = useState([]);
+  const [promos, setPromos]           = useState([]);
   const [stats, setStats]             = useState(null);
   const [tab, setTab]                 = useState('overview');
   const [loading, setLoading]         = useState(true);
@@ -382,17 +545,20 @@ export default function AdminPanel() {
       api.get('/wallet/admin/withdrawals'),
       api.get('/wallet/admin/all-transactions'),
       api.get('/wallet/admin/bots'),
-    ]).then(([p, u, w, tx, b]) => {
+      api.get('/settings/promos'),
+    ]).then(([p, u, w, tx, b, pr]) => {
       const pendingList = p.pending || [];
       const userList    = u.users   || [];
       const wList       = w.withdrawals || [];
       const txList      = tx.transactions || [];
       const botList     = b.bots || [];
+      const promoList   = pr.promos || [];
       setPending(pendingList);
       setUsers(userList);
       setWithdrawals(wList);
       setAllTx(txList);
       setBots(botList);
+      setPromos(promoList);
       setStats({
         totalUsers:          userList.length,
         todayGames:          0,
@@ -469,6 +635,7 @@ export default function AdminPanel() {
     { key: 'transactions', label: 'ግብይቶች' },
     { key: 'users',        label: 'ተጠቃሚ' },
     { key: 'bots',         label: `🤖 ቦቶች` },
+    { key: 'promos',       label: '📢 ፕሮሞ' },
     { key: 'settings',     label: 'ቅንብር' },
   ];
 
@@ -777,6 +944,9 @@ export default function AdminPanel() {
 
           {/* ── Bots ── */}
           {tab === 'bots' && <BotsTab bots={bots} onRefresh={load} />}
+
+          {/* ── Promos ── */}
+          {tab === 'promos' && <PromosTab promos={promos} onRefresh={load} />}
 
           {/* ── Settings ── */}
           {tab === 'settings' && <EntryFeeSettings />}

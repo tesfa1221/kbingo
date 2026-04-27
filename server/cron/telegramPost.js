@@ -52,15 +52,18 @@ async function sendDailyPromotion(time) {
   if (!process.env.TELEGRAM_BOT_TOKEN) return;
 
   try {
-    const PROMOS = [
+    const PROMOS_FALLBACK = [
       `🎮 *K Bingo — ጫወት እና አትርፍ!*\n\n💰 10 ETB ብቻ ከፍለህ 80 ETB+ አትርፍ!\n🏆 አሁን ጫወት 👇`,
-      `💸 *ዛሬ K Bingo ጫወት!*\n\n🎯 ካርድ ምረጥ → ቁጥሮቹን ምልክት አድርግ → BINGO ጩህ!\n💰 10 ETB → 80 ETB+ ደራሽ 👇`,
-      `🔥 *K Bingo — ቀላል ጨዋታ፣ ትልቅ ሽልማት!*\n\n✅ 10 ETB ብቻ\n✅ ደቂቃዎች ውስጥ ታሸንፋለህ\n✅ ሽልማት ወዲያው ወደ ሂሳብህ 👇`,
-      `🏆 *K Bingo ጫወት — ዛሬ አሸናፊ ሁን!*\n\n💰 ትንሽ ክፍያ → ትልቅ ሽልማት\n🎮 አሁን ጫወት 👇`,
-      `⚡ *K Bingo — ፈጣን ጨዋታ፣ ፈጣን ሽልማት!*\n\n🎯 2 ደቂቃ ጨዋታ\n💰 10 ETB → 80 ETB+\n🏆 ዛሬ አሸናፊ ሁን 👇`,
     ];
 
-    const text = PROMOS[Math.floor(Math.random() * PROMOS.length)];
+    // Load active promos from DB, fallback to hardcoded if none
+    let text;
+    try {
+      const [promoRows] = await db.query('SELECT text_body FROM promotions WHERE is_active=1 ORDER BY RAND() LIMIT 1');
+      text = promoRows.length ? promoRows[0].text_body : PROMOS_FALLBACK[0];
+    } catch {
+      text = PROMOS_FALLBACK[0];
+    }
 
     // Send to all users with telegram_id who played in last 7 days
     const [users] = await db.query(`
