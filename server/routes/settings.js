@@ -22,6 +22,26 @@ router.put('/bots-enabled', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'DB error' }); }
 });
 
+// GET /api/settings/bot-win-chance — get bot win chance 0-100 (admin)
+router.get('/bot-win-chance', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT value FROM settings WHERE key_name='bot_win_chance'");
+    res.json({ chance: rows.length ? parseInt(rows[0].value) : 40 });
+  } catch { res.json({ chance: 40 }); }
+});
+
+// PUT /api/settings/bot-win-chance — set bot win chance 0-100 (admin)
+router.put('/bot-win-chance', requireAuth, requireAdmin, async (req, res) => {
+  const chance = Math.max(0, Math.min(100, parseInt(req.body.chance) || 40));
+  try {
+    await db.query(
+      "INSERT INTO settings (key_name, value) VALUES ('bot_win_chance', ?) ON DUPLICATE KEY UPDATE value=VALUES(value)",
+      [String(chance)]
+    );
+    res.json({ message: `Bot win chance set to ${chance}%`, chance });
+  } catch (err) { res.status(500).json({ error: 'DB error' }); }
+});
+
 // GET /api/settings/payment — public, used by wallet deposit screen
 router.get('/payment', async (req, res) => {
   try {

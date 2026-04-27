@@ -55,8 +55,7 @@ class BotManager {
     // Schedule a random BINGO claim attempt during ACTIVE phase
     if (engine.state === 'ACTIVE' && !this._claimScheduled && this.botsThisRound.length > 0) {
       this._claimScheduled = true;
-      const targetBall = MIN_BALLS_BEFORE_CLAIM + Math.floor(Math.random() * (MAX_BALLS_BEFORE_CLAIM - MIN_BALLS_BEFORE_CLAIM));
-      this._scheduleBotClaim(targetBall);
+      this._scheduleBotClaimWithChance();
     }
   }
 
@@ -114,7 +113,31 @@ class BotManager {
     }
   }
 
-  // ── Schedule a bot BINGO claim at a specific ball count ──
+  // ── Schedule a random BINGO claim attempt during ACTIVE phase
+  async _scheduleBotClaimWithChance() {
+    // Read bot win chance from settings (0-100, default 40)
+    let chance = 40;
+    try {
+      const [rows] = await db.query("SELECT value FROM settings WHERE key_name='bot_win_chance'");
+      if (rows.length) chance = Math.max(0, Math.min(100, parseInt(rows[0].value) || 40));
+    } catch { /* use default */ }
+
+    if (chance === 0) {
+      console.log(`🤖 [${this.engine.roomId}] Bot win chance=0%, bots won't claim`);
+      return;
+    }
+
+    // Map chance (0-100) to ball range:
+    // 100% = claim at ball 10-15 (very early)
+    // 50%  = claim at ball 20-28 (balanced)
+    // 0%   = never claim
+    const minBall = Math.round(10 + (100 - chance) * 0.25); // 10 at 100%, 35 at 0%
+    const maxBall = Math.round(15 + (100 - chance) * 0.25); // 15 at 100%, 40 at 0%
+    const targetBall = minBall + Math.floor(Math.random() * (maxBall - minBall + 1));
+
+    console.log(`🤖 [${this.engine.roomId}] Bot win chance=${chance}%, will try at ball ${targetBall}`);
+    this._scheduleBotClaim(targetBall);
+  }
   _scheduleBotClaim(targetBall) {
     const engine    = this.engine;
     const checkFn  = () => {

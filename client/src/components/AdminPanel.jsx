@@ -183,18 +183,23 @@ function EntryFeeSettings() {
 
 // ─── Bots Toggle ──────────────────────────────────────────
 function BotsToggle() {
-  const [enabled, setEnabled] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
+  const [enabled, setEnabled]   = useState(true);
+  const [chance, setChance]     = useState(40);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [savingC, setSavingC]   = useState(false);
 
   useEffect(() => {
-    api.get('/settings/bots-enabled')
-      .then(d => setEnabled(d.enabled !== false))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get('/settings/bots-enabled'),
+      api.get('/settings/bot-win-chance'),
+    ]).then(([b, c]) => {
+      setEnabled(b.enabled !== false);
+      setChance(c.chance ?? 40);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const toggle = async () => {
+  const toggleEnabled = async () => {
     setSaving(true);
     const next = !enabled;
     try {
@@ -205,10 +210,30 @@ function BotsToggle() {
     finally { setSaving(false); }
   };
 
+  const saveChance = async () => {
+    setSavingC(true);
+    try {
+      await api.put('/settings/bot-win-chance', { chance });
+      toast.success(`ቦት ማሸነፍ ዕድል: ${chance}%`);
+    } catch (e) { toast.error(e.error || 'ስህተት'); }
+    finally { setSavingC(false); }
+  };
+
   if (loading) return null;
 
+  const chanceLabel = chance === 0 ? 'ቦቶች አያሸንፉም' :
+                      chance <= 25 ? 'ዝቅተኛ' :
+                      chance <= 50 ? 'መካከለኛ' :
+                      chance <= 75 ? 'ከፍተኛ' : 'በጣም ከፍተኛ';
+
+  const chanceColor = chance === 0 ? 'text-neon' :
+                      chance <= 25 ? 'text-neon' :
+                      chance <= 50 ? 'text-gold' :
+                      chance <= 75 ? 'text-orange-400' : 'text-danger';
+
   return (
-    <div className="glass rounded-2xl p-4 border border-white/5">
+    <div className="glass rounded-2xl p-4 border border-white/5 flex flex-col gap-4">
+      {/* On/Off toggle */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-white font-bold text-sm font-amharic">🤖 ቦቶች</h3>
@@ -217,9 +242,7 @@ function BotsToggle() {
           </p>
         </div>
         <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={toggle}
-          disabled={saving}
+          whileTap={{ scale: 0.9 }} onClick={toggleEnabled} disabled={saving}
           className={`relative w-14 h-7 rounded-full transition-colors disabled:opacity-50
             ${enabled ? 'bg-neon' : 'bg-surface2 border border-white/20'}`}
         >
@@ -230,6 +253,42 @@ function BotsToggle() {
           />
         </motion.button>
       </div>
+
+      {/* Win chance slider */}
+      {enabled && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-white text-xs font-amharic font-bold">ቦት ማሸነፍ ዕድል</p>
+            <span className={`text-xs font-black ${chanceColor}`}>{chance}% — {chanceLabel}</span>
+          </div>
+
+          {/* Slider */}
+          <input
+            type="range" min="0" max="100" step="5"
+            value={chance}
+            onChange={e => setChance(parseInt(e.target.value))}
+            className="w-full h-2 rounded-full appearance-none cursor-pointer"
+            style={{
+              background: `linear-gradient(to right, #39FF14 0%, #D4AF37 50%, #FF4444 100%)`,
+              accentColor: chance <= 25 ? '#39FF14' : chance <= 50 ? '#D4AF37' : '#FF4444',
+            }}
+          />
+
+          {/* Labels */}
+          <div className="flex justify-between text-[9px] text-muted font-amharic">
+            <span>0% — ቦቶች አያሸንፉም</span>
+            <span>50% — ሚዛናዊ</span>
+            <span>100% — ቦቶች ሁልጊዜ</span>
+          </div>
+
+          <motion.button
+            whileTap={{ scale: 0.97 }} onClick={saveChance} disabled={savingC}
+            className="py-2.5 rounded-xl bg-surface2 border border-white/10 text-white text-sm font-bold disabled:opacity-50 hover:border-white/20 transition-colors"
+          >
+            {savingC ? 'እየተቀመጠ...' : '💾 አስቀምጥ'}
+          </motion.button>
+        </div>
+      )}
     </div>
   );
 }
