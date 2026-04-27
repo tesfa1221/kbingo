@@ -140,9 +140,10 @@ async function telegramLogin(req, res) {
   const tgUser = data.user;
   if (!tgUser) return res.status(400).json({ error: 'No user in initData' });
 
+  // Auto-register if not exists — give 10 ETB welcome bonus
   await db.query(
-    `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, balance)
+     VALUES (?, ?, ?, ?, ?, 10.00)
      ON DUPLICATE KEY UPDATE
        username=VALUES(username),
        first_name=VALUES(first_name),

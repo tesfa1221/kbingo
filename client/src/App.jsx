@@ -39,15 +39,21 @@ export default function App() {
     const tg = window.Telegram?.WebApp;
 
     if (tg && tg.initData) {
-      // ── Telegram Mini App ──────────────────────────────
+      // ── Telegram Mini App — auto-register and login ────
       api.post('/auth/telegram', { initData: tg.initData })
         .then(({ token: t, user: u }) => {
           setToken(t);
           setUser(u);
+          reconnectWithToken(t);
           tg.ready();
           tg.expand();
+          // Tell Telegram the app is ready
+          tg.setHeaderColor('#121212');
+          tg.setBackgroundColor('#121212');
         })
-        .catch(console.error)
+        .catch(() => {
+          // Telegram auth failed — show normal login screen
+        })
         .finally(() => setAuthChecked(true));
 
     } else if (token) {

@@ -238,21 +238,31 @@ server.listen(PORT, async () => {
   // Set Telegram webhook
   if (process.env.TELEGRAM_BOT_TOKEN && process.env.RENDER_EXTERNAL_URL) {
     const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/telegram/webhook`;
+    const miniAppUrl = process.env.MINI_APP_URL || 'https://negattech.com/kbingo';
     const https = require('https');
-    const body  = JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
-    const req   = https.request({
-      hostname: 'api.telegram.org',
-      path:     `/bot${process.env.TELEGRAM_BOT_TOKEN}/setWebhook`,
-      method:   'POST',
-      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-    }, res => {
-      let d = ''; res.on('data', c => d += c);
-      res.on('end', () => {
-        const r = JSON.parse(d);
-        console.log(`🤖 Telegram webhook: ${r.ok ? '✅ ' + webhookUrl : '❌ ' + r.description}`);
+
+    function tgPost(method, body) {
+      return new Promise(resolve => {
+        const data = JSON.stringify(body);
+        const req  = https.request({
+          hostname: 'api.telegram.org',
+          path:     `/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`,
+          method:   'POST',
+          headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+        }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>resolve(JSON.parse(d))); });
+        req.write(data); req.end();
       });
-    });
-    req.write(body); req.end();
+    }
+
+    // Set webhook
+    tgPost('setWebhook', { url: webhookUrl, allowed_updates: ['message','callback_query'] })
+      .then(r => console.log(`🤖 Webhook: ${r.ok ? '✅ ' + webhookUrl : '❌ ' + r.description}`))
+      .catch(() => {});
+
+    // Set menu button to open Mini App directly
+    tgPost('setChatMenuButton', {
+      menu_button: { type: 'web_app', text: '🎮 K Bingo ጫወት', web_app: { url: miniAppUrl } }
+    }).then(r => console.log(`🤖 Menu button: ${r.ok ? '✅' : r.description}`)).catch(() => {});
   }
 
   Object.values(engines).forEach(e => e.start());
