@@ -175,8 +175,36 @@ if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
 
 // ─── Start ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
+
+  // Auto-seed bots on startup (safe — uses ON DUPLICATE KEY UPDATE)
+  try {
+    const bcrypt = require('bcryptjs');
+    const hash   = await bcrypt.hash('bot_secret_2024', 10);
+    const bots   = [
+      ['Abebe','abebe_bot'],['Tigist','tigist_bot'],['Dawit','dawit_bot'],
+      ['Selam','selam_bot'],['Yonas','yonas_bot'],['Mekdes','mekdes_bot'],
+      ['Biruk','biruk_bot'],['Hana','hana_bot'],['Samuel','samuel_bot'],
+      ['Rahel','rahel_bot'],['Eyob','eyob_bot'],['Bethlehem','bethlehem_bot'],
+      ['Natnael','natnael_bot'],['Lidya','lidya_bot'],['Henok','henok_bot'],
+    ];
+    // Add is_bot column if missing
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_bot TINYINT(1) NOT NULL DEFAULT 0 AFTER is_admin').catch(() => {});
+    for (const [firstName, username] of bots) {
+      await db.query(
+        `INSERT INTO users (username, first_name, is_bot, balance, password_hash, referral_code)
+         VALUES (?,?,1,500,?,?)
+         ON DUPLICATE KEY UPDATE is_bot=1, balance=IF(balance<100,500,balance)`,
+        [username, firstName, hash, username.toUpperCase().slice(0,8)]
+      ).catch(() => {});
+    }
+    const [botRows] = await db.query('SELECT COUNT(*) as cnt FROM users WHERE is_bot=1');
+    console.log(`🤖 ${botRows[0].cnt} bots ready`);
+  } catch(e) {
+    console.error('Bot seed error (non-fatal):', e.message);
+  }
+
   Object.values(engines).forEach(e => e.start());
   startDailySummaryCron();
 });
