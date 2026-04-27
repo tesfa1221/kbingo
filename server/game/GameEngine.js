@@ -231,12 +231,6 @@ class GameEngine {
     this.io.to(this.roomId).emit('game:new_round', this.getSnapshot());
     console.log(`🎮 [${this.roomId}] New round: ${gameCode} | fee=${this.entryFee} ETB | minPrize=${this.minPrize} ETB`);
 
-    // Notify Telegram users about new round (only standard room, not every round)
-    if (this.roomId === 'standard') {
-      const { notifyNewRound } = require('../telegram/bot');
-      notifyNewRound(this.roomId, this.entryFee, this.entryFee * 4).catch(() => {});
-    }
-
     this._timer = setInterval(() => this._tick(), 1000);
   }
 
