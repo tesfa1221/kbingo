@@ -135,7 +135,12 @@ async function telegramLogin(req, res) {
   if (!initData) return res.status(400).json({ error: 'initData required' });
 
   const { valid, data } = validateTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN);
-  if (!valid) return res.status(401).json({ error: 'Invalid Telegram auth' });
+
+  if (!valid) {
+    // Log for debugging
+    console.error('❌ Telegram initData validation failed. Token set:', !!process.env.TELEGRAM_BOT_TOKEN);
+    return res.status(401).json({ error: 'Invalid Telegram auth' });
+  }
 
   const tgUser = data.user;
   if (!tgUser) return res.status(400).json({ error: 'No user in initData' });
@@ -155,6 +160,7 @@ async function telegramLogin(req, res) {
   const [rows] = await db.query('SELECT * FROM users WHERE telegram_id = ?', [tgUser.id]);
   const user = rows[0];
   const token = _signToken(user);
+  console.log(`✅ Telegram login: ${user.first_name} (${user.telegram_id})`);
   return res.json({ token, user: sanitizeUser(user) });
 }
 

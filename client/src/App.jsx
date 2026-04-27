@@ -38,21 +38,22 @@ export default function App() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
 
-    if (tg && tg.initData) {
+    if (tg && tg.initData && tg.initData.length > 0) {
       // ── Telegram Mini App — auto-register and login ────
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor?.('#121212');
+      tg.setBackgroundColor?.('#121212');
+
       api.post('/auth/telegram', { initData: tg.initData })
         .then(({ token: t, user: u }) => {
           setToken(t);
           setUser(u);
           reconnectWithToken(t);
-          tg.ready();
-          tg.expand();
-          // Tell Telegram the app is ready
-          tg.setHeaderColor('#121212');
-          tg.setBackgroundColor('#121212');
         })
-        .catch(() => {
-          // Telegram auth failed — show normal login screen
+        .catch((err) => {
+          console.error('Telegram auth failed:', err);
+          // Still mark as checked — show login screen as fallback
         })
         .finally(() => setAuthChecked(true));
 
@@ -76,23 +77,45 @@ export default function App() {
     }
   }, []);
 
+  const isTelegram = !!(window.Telegram?.WebApp?.initData?.length > 0);
+
   // Splash while checking session
   if (!authChecked) {
     return (
       <div className="min-h-screen bg-charcoal flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gold/10 border-2 border-gold/40
-                          flex items-center justify-center shadow-gold">
+          <div className="w-16 h-16 rounded-full bg-gold/10 border-2 border-gold/40 flex items-center justify-center shadow-gold">
             <span className="text-gold font-black text-3xl">K</span>
           </div>
           <div className="w-8 h-8 border-2 border-neon border-t-transparent rounded-full animate-spin" />
+          {isTelegram && <p className="text-muted text-xs font-amharic">Telegram ከ እየተጫነ...</p>}
         </div>
       </div>
     );
   }
 
-  // Not logged in — show auth screen
+  // Not logged in
   if (!user) {
+    // If opened inside Telegram but auth failed — show retry button
+    if (isTelegram) {
+      return (
+        <div className="min-h-screen bg-charcoal flex flex-col items-center justify-center p-6 gap-6">
+          <div className="w-20 h-20 rounded-full bg-gold/10 border-2 border-gold/50 flex items-center justify-center shadow-gold">
+            <span className="text-gold font-black text-4xl">K</span>
+          </div>
+          <h1 className="text-gradient-gold font-black text-2xl font-amharic">K Bingo</h1>
+          <p className="text-muted text-sm font-amharic text-center">
+            Telegram ግንኙነት አልተሳካም። እንደገና ይሞክሩ።
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-8 py-3 rounded-xl bg-neon text-charcoal font-black"
+          >
+            እንደገና ሞክር
+          </button>
+        </div>
+      );
+    }
     return <AuthScreen />;
   }
 
