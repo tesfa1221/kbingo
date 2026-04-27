@@ -132,6 +132,10 @@ export default function WalletPanel() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [tab, setTab]                   = useState('deposit');
+  const [paymentInfo, setPaymentInfo]   = useState({
+    telebirr: { number: '0946336242', name: 'Tesfamichael' },
+    cbe:      { number: '1000296475387', name: 'Tesfamikael Worku' },
+  });
 
   // Deposit state
   const [smsText, setSmsText]           = useState('');
@@ -150,6 +154,10 @@ export default function WalletPanel() {
     api.get('/wallet/transactions')
       .then(d => setTransactions(d.transactions || []))
       .finally(() => setLoading(false));
+    // Fetch live payment settings
+    api.get('/settings/payment')
+      .then(d => setPaymentInfo(d))
+      .catch(() => {});
   }, []);
 
   // Auto-parse when SMS text changes
@@ -232,24 +240,20 @@ export default function WalletPanel() {
         <div className="glass rounded-2xl p-4 border border-white/5">
           <h3 className="text-white font-bold mb-1 font-amharic">💳 ገንዘብ ጨምር</h3>
 
-          {/* Payment accounts */}
+          {/* Payment accounts — live from admin settings */}
           <div className="flex flex-col gap-2 mb-4">
-            {/* Telebirr */}
             <CopyableAccount
-              icon="📱"
-              label="Telebirr"
-              number="0946336242"
-              display="0946 336 242"
-              name="Tesfamichael"
+              icon="📱" label="Telebirr"
+              number={paymentInfo.telebirr.number}
+              display={paymentInfo.telebirr.number}
+              name={paymentInfo.telebirr.name}
               color="neon"
             />
-            {/* CBE */}
             <CopyableAccount
-              icon="🏦"
-              label="CBE (Commercial Bank)"
-              number="1000296475387"
-              display="1000 2964 75387"
-              name="Tesfamikael Worku"
+              icon="🏦" label="CBE (Commercial Bank)"
+              number={paymentInfo.cbe.number}
+              display={paymentInfo.cbe.number}
+              name={paymentInfo.cbe.name}
               color="gold"
             />
           </div>

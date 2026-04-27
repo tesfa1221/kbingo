@@ -149,26 +149,94 @@ function EntryFeeSettings() {
   };
 
   return (
+    <div className="flex flex-col gap-4">
+      <div className="glass rounded-2xl p-4 border border-white/5">
+        <h3 className="text-white font-bold mb-1 font-amharic">💰 የመግቢያ ክፍያ</h3>
+        <p className="text-muted text-xs font-amharic mb-3">ቀጣይ ዙር ክፍያ ይምረጡ</p>
+        <div className="grid grid-cols-5 gap-2 mb-3">
+          {options.map(fee => (
+            <motion.button key={fee} whileTap={{ scale: 0.9 }} onClick={() => setSelected(fee)}
+              className={`py-3 rounded-xl font-black text-sm border transition-all
+                ${selected === fee ? 'bg-gold text-charcoal border-gold shadow-gold' : 'bg-surface2 text-muted border-white/10'}`}>
+              {fee}
+            </motion.button>
+          ))}
+        </div>
+        <div className="flex items-center justify-between text-xs mb-3">
+          <span className="text-muted font-amharic">ምርጫ: <span className="text-gold font-bold">{selected} ETB</span></span>
+          <span className="text-muted font-amharic">ደራሽ: <span className="text-neon font-bold">{(selected * 0.8).toFixed(0)} ETB</span></span>
+        </div>
+        <motion.button whileTap={{ scale: 0.97 }} onClick={save} disabled={saving}
+          className="w-full py-3 rounded-xl bg-neon text-charcoal font-black disabled:opacity-50">
+          {saving ? 'እየተቀመጠ...' : 'ቀጣይ ዙር ላይ ተግብር'}
+        </motion.button>
+      </div>
+
+      {/* Payment accounts editor */}
+      <PaymentSettings />
+    </div>
+  );
+}
+
+// ─── Payment Settings ─────────────────────────────────────
+function PaymentSettings() {
+  const [form, setForm] = useState({
+    telebirr_number: '', telebirr_name: '',
+    cbe_number: '',      cbe_name: '',
+  });
+  const [loadingP, setLoadingP] = useState(true);
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    api.get('/settings/payment').then(d => {
+      setForm({
+        telebirr_number: d.telebirr?.number || '',
+        telebirr_name:   d.telebirr?.name   || '',
+        cbe_number:      d.cbe?.number      || '',
+        cbe_name:        d.cbe?.name        || '',
+      });
+    }).catch(() => {}).finally(() => setLoadingP(false));
+  }, []);
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.put('/settings/payment', form);
+      toast.success('የክፍያ መረጃ ተቀይሯል ✅');
+    } catch (err) { toast.error(err.error || 'ስህተት'); }
+    finally { setSaving(false); }
+  };
+
+  if (loadingP) return <div className="flex justify-center py-4"><div className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
     <div className="glass rounded-2xl p-4 border border-white/5">
-      <h3 className="text-white font-bold mb-1 font-amharic">💰 የመግቢያ ክፍያ</h3>
-      <p className="text-muted text-xs font-amharic mb-3">ቀጣይ ዙር ክፍያ ይምረጡ</p>
-      <div className="grid grid-cols-5 gap-2 mb-3">
-        {options.map(fee => (
-          <motion.button key={fee} whileTap={{ scale: 0.9 }} onClick={() => setSelected(fee)}
-            className={`py-3 rounded-xl font-black text-sm border transition-all
-              ${selected === fee ? 'bg-gold text-charcoal border-gold shadow-gold' : 'bg-surface2 text-muted border-white/10'}`}>
-            {fee}
-          </motion.button>
-        ))}
-      </div>
-      <div className="flex items-center justify-between text-xs mb-3">
-        <span className="text-muted font-amharic">ምርጫ: <span className="text-gold font-bold">{selected} ETB</span></span>
-        <span className="text-muted font-amharic">ደራሽ: <span className="text-neon font-bold">{(selected * 0.8).toFixed(0)} ETB</span></span>
-      </div>
-      <motion.button whileTap={{ scale: 0.97 }} onClick={save} disabled={saving}
-        className="w-full py-3 rounded-xl bg-neon text-charcoal font-black disabled:opacity-50">
-        {saving ? 'እየተቀመጠ...' : 'ቀጣይ ዙር ላይ ተግብር'}
-      </motion.button>
+      <h3 className="text-white font-bold mb-3 font-amharic">💳 የክፍያ መረጃ ቀይር</h3>
+      <form onSubmit={save} className="flex flex-col gap-3">
+        <p className="text-neon text-xs font-bold">📱 Telebirr</p>
+        <input value={form.telebirr_number} onChange={set('telebirr_number')}
+          placeholder="Telebirr ቁጥር" type="tel"
+          className="bg-surface2 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-muted focus:outline-none focus:border-neon/50" />
+        <input value={form.telebirr_name} onChange={set('telebirr_name')}
+          placeholder="የባለቤቱ ስም"
+          className="bg-surface2 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-muted focus:outline-none focus:border-neon/50" />
+
+        <p className="text-gold text-xs font-bold mt-1">🏦 CBE</p>
+        <input value={form.cbe_number} onChange={set('cbe_number')}
+          placeholder="CBE አካውንት ቁጥር" type="tel"
+          className="bg-surface2 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-muted focus:outline-none focus:border-gold/50" />
+        <input value={form.cbe_name} onChange={set('cbe_name')}
+          placeholder="የባለቤቱ ስም"
+          className="bg-surface2 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-muted focus:outline-none focus:border-gold/50" />
+
+        <motion.button whileTap={{ scale: 0.97 }} type="submit" disabled={saving}
+          className="py-3 rounded-xl bg-gold text-charcoal font-black disabled:opacity-50 mt-1">
+          {saving ? 'እየተቀመጠ...' : '💾 አስቀምጥ'}
+        </motion.button>
+      </form>
     </div>
   );
 }

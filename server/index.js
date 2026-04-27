@@ -13,6 +13,7 @@ const { postWinnerToTelegram, startDailySummaryCron } = require('./cron/telegram
 const authRoutes                        = require('./routes/auth');
 const { router: gameRoutes, setEngines } = require('./routes/game');
 const walletRoutes                      = require('./routes/wallet');
+const settingsRoutes                    = require('./routes/settings');
 
 process.on('uncaughtException',  (err)    => console.error('❌ Uncaught Exception:', err.message));
 process.on('unhandledRejection', (reason) => console.error('❌ Unhandled Rejection:', reason?.message || reason));
@@ -55,9 +56,10 @@ app.use('/api/auth/login',    authLimiter);
 app.use('/api/auth/register', authLimiter);
 
 // ─── Routes ──────────────────────────────────────────────
-app.use('/api/auth',   authRoutes);
-app.use('/api/game',   gameRoutes);
-app.use('/api/wallet', walletRoutes);
+app.use('/api/auth',     authRoutes);
+app.use('/api/game',     gameRoutes);
+app.use('/api/wallet',   walletRoutes);
+app.use('/api/settings', settingsRoutes);
 app.get('/health', (_, res) => res.json({ status: 'ok', rooms: Object.keys(engines) }));
 
 // ─── Game Engines (one per room) ─────────────────────────
@@ -177,6 +179,26 @@ if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
+
+  // Auto-create settings table and seed defaults
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS settings (
+      id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      key_name VARCHAR(100) NOT NULL UNIQUE,
+      value TEXT NOT NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB CHARACTER SET utf8mb4`);
+    const paymentDefaults = [
+      ['telebirr_number', '0946336242'],
+      ['telebirr_name',   'Tesfamichael'],
+      ['cbe_number',      '1000296475387'],
+      ['cbe_name',        'Tesfamikael Worku'],
+    ];
+    for (const [k, v] of paymentDefaults) {
+      await db.query('INSERT INTO settings (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE key_name=key_name', [k, v]);
+    }
+    console.log('⚙️  Settings table ready');
+  } catch(e) { console.error('Settings setup error (non-fatal):', e.message); }
 
   // Auto-seed bots on startup (safe — uses ON DUPLICATE KEY UPDATE)
   try {
