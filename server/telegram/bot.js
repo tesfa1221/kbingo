@@ -10,6 +10,21 @@ const MINI_APP_URL = process.env.MINI_APP_URL || 'https://negattech.com/kbingo';
 const BASE_URL     = `https://api.telegram.org/bot${TOKEN}`;
 const SUPPORT_USER = '@Tesfa3362';
 
+// ─── Conversation state (in-memory per user) ─────────────
+// state: { step, data }
+// steps: 'deposit_amount' | 'deposit_sms' | 'withdraw_amount' | 'withdraw_method' | 'withdraw_phone'
+const userState = new Map();
+
+function setState(userId, step, data = {}) {
+  userState.set(userId, { step, data });
+}
+function getState(userId) {
+  return userState.get(userId) || null;
+}
+function clearState(userId) {
+  userState.delete(userId);
+}
+
 // ─── Core send functions ──────────────────────────────────
 async function sendMessage(chatId, text, extra = {}) {
   if (!TOKEN) return;
@@ -94,6 +109,13 @@ async function handleUpdate(update) {
   const text    = msg.text || '';
   const contact = msg.contact;
 
+  // ── Check conversation state first ───────────────────────
+  const state = getState(userId);
+  if (state && text && !text.startsWith('/')) {
+    await handleConversationStep(chatId, userId, text, state);
+    return;
+  }
+
   // ── Phone number shared ──────────────────────────────────
   if (contact && contact.user_id === userId) {
     const phone     = contact.phone_number?.replace(/\D/g, '');
@@ -173,6 +195,146 @@ async function handleUpdate(update) {
   }
 }
 
+// ─── Conversation step handler ───────────────────────────
+async function handleConversationStep(chatId, userId, text, state) {
+  const cancelBtn = { reply_markup: { inline_keyboard: [[{ text: '❌ ሰርዝ', callback_data: 'cancel' }]] } };
+
+  switch (state.step) {
+
+    // ── DEPOSIT: step 1 — ask amount ──
+    case 'deposit_amount': {
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount < 10 || amount > 100000) {
+        await sendMessage(chatId, '⚠️ ትክክለኛ መጠን ያስገቡ (10 – 100,000 ETB)\n\nምሳሌ: *200*', cancelBtn);
+        return;
+      }
+      const { tbirr, cbe } = state.data;
+      setState(userId, 'deposit_sms', { amount, tbirr, cbe });
+      await sendMessage(chatId,
+        `✅ *${amount} ETB* ወደ አንዱ ቁጥር ይላኩ:\n\n` +
+        `📱 Telebirr: \`${tbirr.number}\`\n` +
+        `🏦 CBE: \`${cbe.number}\`\n\n` +
+        `ከላኩ በኋላ የ SMS ማረጋገጫ ቅዱና ይህን chat ላይ ለጥፉ 👇`,
+        cancelBtn
+      );
+      break;
+    }
+
+    // ── DEPOSIT: step 2 — receive SMS ──
+    case 'deposit_sms': {
+      const { amount } = state.data;
+      if (text.length < 10) {
+        await sendMessage(chatId, '⚠️ ትክክለኛ SMS ለጥፉ\n\nየ Telebirr ወይም CBE ማረጋገጫ SMS ይሆናል', cancelBtn);
+        return;
+      }
+      // Save deposit request to DB
+      try {
+        const [uRows] = await db.query('SELECT id, balance FROM users WHERE telegram_id=?', [userId]);
+        if (!uRows.length) { await sendMessage(chatId, 'ለመጀመር /start ይጫኑ'); clearState(userId); return; }
+        const u = uRows[0];
+        const balBefore = parseFloat(u.balance);
+        await db.query(
+          `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, status, admin_note)
+           VALUES (?, 'DEPOSIT', ?, ?, ?, 'PENDING', ?)`,
+          [u.id, amount, balBefore, balBefore, `SMS (Telegram): ${text.substring(0, 500)}`]
+        );
+        clearState(userId);
+        await sendMessage(chatId,
+          `✅ *ጥያቄ ተልኳል!*\n\n` +
+          `💰 መጠን: *${amount} ETB*\n` +
+          `⏳ አስተዳዳሪ ካረጋገጠ በኋላ ሂሳብህ ይጨምራል\n\n` +
+          `ለጥያቄ ${SUPPORT_USER} ያናግሩ`,
+          { reply_markup: { inline_keyboard: [[{ text: '🔙 ወደ ዋና ምናሌ', callback_data: 'menu' }]] } }
+        );
+      } catch (e) {
+        console.error('deposit_sms error:', e.message);
+        await sendMessage(chatId, '❌ ስህተት ተፈጥሯል። እንደገና ይሞክሩ ወይም ' + SUPPORT_USER + ' ያናግሩ');
+        clearState(userId);
+      }
+      break;
+    }
+
+    // ── WITHDRAW: step 1 — ask amount ──
+    case 'withdraw_amount': {
+      const amount = parseFloat(text);
+      const [uRows] = await db.query('SELECT balance FROM users WHERE telegram_id=?', [userId]);
+      const balance = parseFloat(uRows[0]?.balance || 0);
+      if (isNaN(amount) || amount < 10) {
+        await sendMessage(chatId, '⚠️ ቢያንስ 10 ETB መሆን አለበት', cancelBtn);
+        return;
+      }
+      if (balance - amount < 100) {
+        await sendMessage(chatId,
+          `⚠️ ቀሪ ሂሳብ *${balance.toFixed(0)} ETB*\n` +
+          `ከወጪ በኋላ ቢያንስ 100 ETB ሊቀር ይገባዋል\n` +
+          `ከፍተኛ ማውጫ: *${Math.max(0, balance - 100).toFixed(0)} ETB*`,
+          cancelBtn
+        );
+        return;
+      }
+      setState(userId, 'withdraw_method', { amount });
+      await sendMessage(chatId,
+        `⬇️ *${amount} ETB* ወደ የትኛው ይላካ?\n`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '📱 Telebirr', callback_data: 'wm_telebirr' },
+                { text: '🏦 CBE', callback_data: 'wm_cbe' },
+              ],
+              [{ text: '❌ ሰርዝ', callback_data: 'cancel' }]
+            ]
+          }
+        }
+      );
+      break;
+    }
+
+    // ── WITHDRAW: step 3 — phone number ──
+    case 'withdraw_phone': {
+      const phone = text.replace(/\D/g, '');
+      if (phone.length < 9) {
+        await sendMessage(chatId, '⚠️ ትክክለኛ ስልክ ቁጥር ያስገቡ\n\nምሳሌ: *0911111111*', cancelBtn);
+        return;
+      }
+      const { amount, method } = state.data;
+      try {
+        const [uRows] = await db.query('SELECT id, balance FROM users WHERE telegram_id=?', [userId]);
+        const u = uRows[0];
+        const balBefore = parseFloat(u.balance);
+        const balAfter  = balBefore - amount;
+        if (balBefore - amount < 100) {
+          await sendMessage(chatId, '⚠️ ሂሳብ አልበቃም', cancelBtn);
+          clearState(userId); return;
+        }
+        await db.query('UPDATE users SET balance=? WHERE id=?', [balAfter, u.id]);
+        await db.query(
+          `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, status, reference_id)
+           VALUES (?, 'WITHDRAWAL', ?, ?, ?, 'PENDING', ?)`,
+          [u.id, amount, balBefore, balAfter, `${method}:${phone}`]
+        );
+        clearState(userId);
+        await sendMessage(chatId,
+          `✅ *የወጪ ጥያቄ ተልኳል!*\n\n` +
+          `💰 *${amount} ETB* → ${method === 'telebirr' ? 'Telebirr' : 'CBE'} ${phone}\n` +
+          `⏳ አስተዳዳሪ ካረጋገጠ በኋላ ይላካል\n\n` +
+          `ለጥያቄ ${SUPPORT_USER} ያናግሩ`,
+          { reply_markup: { inline_keyboard: [[{ text: '🔙 ወደ ዋና ምናሌ', callback_data: 'menu' }]] } }
+        );
+      } catch (e) {
+        console.error('withdraw_phone error:', e.message);
+        await sendMessage(chatId, '❌ ስህተት ተፈጥሯል');
+        clearState(userId);
+      }
+      break;
+    }
+
+    default:
+      clearState(userId);
+      await sendMessage(chatId, 'ለመቀጠል /start ይጫኑ');
+  }
+}
+
 // ─── Handle button callbacks ──────────────────────────────
 async function handleCallback(cb) {
   const chatId = cb.message.chat.id;
@@ -230,7 +392,7 @@ async function handleCallback(cb) {
       break;
 
     case 'deposit': {
-      // Get live payment accounts from settings
+      // Get live payment accounts
       let tbirr = { number: '0946336242', name: 'Tesfamichael' };
       let cbe   = { number: '1000296475387', name: 'Tesfamikael Worku' };
       try {
@@ -241,36 +403,27 @@ async function handleCallback(cb) {
         if (m.cbe_number)      cbe   = { number: m.cbe_number,      name: m.cbe_name      || cbe.name };
       } catch {}
 
+      // Start deposit conversation
+      setState(userId, 'deposit_amount', { tbirr, cbe });
       await sendMessage(chatId,
         `💳 *ገንዘብ ጨምር*\n\n` +
-        `📱 *Telebirr*\n\`${tbirr.number}\`\nስም: ${tbirr.name}\n\n` +
-        `🏦 *CBE*\n\`${cbe.number}\`\nስም: ${cbe.name}\n\n` +
-        `✅ ከላኩ በኋላ:\n1. የ SMS ማረጋገጫ ቅዱ\n2. ጨዋታ ከፍቶ → ሂሳብ → ጨምር → ለጥፍ`,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🎮 ጨዋታ ክፈት', web_app: { url: MINI_APP_URL } }],
-              [{ text: '🔙 ወደ ዋና ምናሌ', callback_data: 'menu' }],
-            ]
-          }
-        }
+        `📱 Telebirr: \`${tbirr.number}\` (${tbirr.name})\n` +
+        `🏦 CBE: \`${cbe.number}\` (${cbe.name})\n\n` +
+        `ስንት ETB ማስቀመጥ ይፈልጋሉ? (ቁጥር ብቻ ይጻፉ)\n\nምሳሌ: *200*`,
+        { reply_markup: { inline_keyboard: [[{ text: '❌ ሰርዝ', callback_data: 'cancel' }]] } }
       );
       break;
     }
 
     case 'withdraw':
+      // Start withdraw conversation
+      setState(userId, 'withdraw_amount', { balance: user.balance });
       await sendMessage(chatId,
         `⬇️ *ገንዘብ አውጣ*\n\n` +
-        `ለማውጣት ጨዋታ ከፍቶ → ሂሳብ → አውጣ\n\n` +
-        `⚠️ ቢያንስ *100 ETB* ሂሳብ ውስጥ መቆየት አለበት`,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🎮 ጨዋታ ክፈት', web_app: { url: MINI_APP_URL } }],
-              [{ text: '🔙 ወደ ዋና ምናሌ', callback_data: 'menu' }],
-            ]
-          }
-        }
+        `💰 ቀሪ ሂሳብ: *${parseFloat(user.balance).toFixed(2)} ETB*\n` +
+        `⚠️ ቢያንስ 100 ETB ሂሳብ ውስጥ ይቆያል\n\n` +
+        `ስንት ETB ማውጣት ይፈልጋሉ? (ቁጥር ብቻ ይጻፉ)\n\nምሳሌ: *150*`,
+        { reply_markup: { inline_keyboard: [[{ text: '❌ ሰርዝ', callback_data: 'cancel' }]] } }
       );
       break;
 
@@ -331,6 +484,26 @@ async function handleCallback(cb) {
         }
       );
       break;
+
+    case 'cancel':
+      clearState(userId);
+      await sendWelcome(chatId, user?.first_name, user?.balance);
+      break;
+
+    case 'wm_telebirr':
+    case 'wm_cbe': {
+      const method  = data === 'wm_telebirr' ? 'telebirr' : 'cbe';
+      const label   = method === 'telebirr' ? 'Telebirr' : 'CBE';
+      const current = getState(userId);
+      if (current?.step === 'withdraw_method') {
+        setState(userId, 'withdraw_phone', { ...current.data, method });
+      }
+      await sendMessage(chatId,
+        `📱 ${label} ቁጥርዎን ያስገቡ:\n\nምሳሌ: *0911111111*`,
+        { reply_markup: { inline_keyboard: [[{ text: '❌ ሰርዝ', callback_data: 'cancel' }]] } }
+      );
+      break;
+    }
 
     case 'menu':
       await sendWelcome(chatId, user?.first_name, user?.balance);
