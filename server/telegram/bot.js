@@ -133,7 +133,6 @@ async function handleUpdate(update) {
     if (user) {
       await sendWelcome(chatId, user.first_name, user.balance);
     } else {
-      // New user — show register prompt
       await sendMessage(chatId,
         `*K Bingo* へ እንኳን ደህና መጡ! 🎉\n\n` +
         `ለመጀመር ስልክ ቁጥርዎን ያጋሩ 👇`,
@@ -148,7 +147,25 @@ async function handleUpdate(update) {
     return;
   }
 
-  // Default — show menu
+  if (text.startsWith('/play')) {
+    await sendMessage(chatId, '🎮 ጨዋታ ለመጀመር 👇', {
+      reply_markup: { inline_keyboard: [[{ text: '🎮 K Bingo ጫወት', web_app: { url: MINI_APP_URL } }]] }
+    });
+    return;
+  }
+
+  if (text.startsWith('/register'))  { await handleCallback({ message: msg, from: msg.from, id: '', data: 'register' }); return; }
+  if (text.startsWith('/balance'))   { await handleCallback({ message: msg, from: msg.from, id: '', data: 'balance' }); return; }
+  if (text.startsWith('/deposit'))   { await handleCallback({ message: msg, from: msg.from, id: '', data: 'deposit' }); return; }
+  if (text.startsWith('/withdraw'))  { await handleCallback({ message: msg, from: msg.from, id: '', data: 'withdraw' }); return; }
+  if (text.startsWith('/invite'))    { await handleCallback({ message: msg, from: msg.from, id: '', data: 'invite' }); return; }
+  if (text.startsWith('/support'))   { await handleCallback({ message: msg, from: msg.from, id: '', data: 'support' }); return; }
+  if (text.startsWith('/help') || text.startsWith('/instruction')) {
+    await handleCallback({ message: msg, from: msg.from, id: '', data: 'instruction' });
+    return;
+  }
+
+  // Default — show main menu
   if (user) {
     await sendWelcome(chatId, user.first_name, user.balance);
   } else {
