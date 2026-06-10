@@ -91,10 +91,8 @@ function attachListeners(socket) {
 
   socket.on('bingo:result', (result) => {
     if (result.ok) {
-      playBingoWin();
-      toast.success('🎉 BINGO! አሸነፍህ!', { duration: 8000 });
+      // Flash and sound come from game:bingo event
     } else {
-      // Not a valid line yet — friendly message, no penalty
       toast('ገና አልተሞላም! ቁጥሮቹ ሲጠሩ ምልክት አድርግ', {
         icon: '⏳',
         duration: 3000,
@@ -108,9 +106,18 @@ function attachListeners(socket) {
     store.setWinners(winners, prizeShare);
     store.setLastRound({ gameCode, winners, prizeShare, pattern, balls, refund });
     const { user } = store;
-    if (user && winners.some(w => w.userId === user.id)) {
+    const isMyWin = !!(user && winners.some(w => w.userId === user.id));
+    if (isMyWin) {
       store.updateBalance(parseFloat(user.balance) + prizeShare);
+      playBingoWin();
     }
+    // Flash BINGO for everyone — winner sees gold, others see green
+    const winnerName = !isMyWin && winners[0]
+      ? (winners[0].firstName || winners[0].username || null)
+      : null;
+    store.showBingoFlash(isMyWin, winnerName);
+    // Celebration overlay for winner shows after flash completes (1.6s)
+    // handled in App.jsx onDone callback
   });
 
   socket.on('penalty:false_bingo', ({ message }) => {

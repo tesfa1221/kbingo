@@ -19,9 +19,11 @@ import LowBalanceBanner from './components/LowBalanceBanner';
 import HelpPanel from './components/HelpPanel';
 import ProfilePanel from './components/ProfilePanel';
 import RoomSelector from './components/RoomSelector';
+import BingoFlash from './components/BingoFlash';
 
 export default function App() {
-  const { user, token, myCards, myCard, setUser, setToken, activeTab, showCelebration } = useGameStore();
+  const { user, token, myCards, myCard, setUser, setToken, activeTab, showCelebration,
+          bingoFlash, bingoFlashWinner, bingoFlashName, clearBingoFlash } = useGameStore();
   const [authChecked, setAuthChecked] = useState(false);
   const audioInitialized = useRef(false);
 
@@ -153,6 +155,18 @@ export default function App() {
 
       <TabBar />
       {showCelebration && <CelebrationOverlay />}
+      <BingoFlash
+        show={bingoFlash}
+        isWinner={bingoFlashWinner}
+        winnerName={bingoFlashName}
+        onDone={() => {
+          clearBingoFlash();
+          // If winner, show celebration after flash
+          if (bingoFlashWinner) {
+            useGameStore.getState().showCelebrationAfterFlash();
+          }
+        }}
+      />
     </div>
   );
 }

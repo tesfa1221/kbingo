@@ -66,6 +66,13 @@ export const useGameStore = create((set, get) => ({
     set({ audioOn: v });
   },
 
+  // ── BINGO Flash ─────────────────────────────────────────
+  bingoFlash:     false,
+  bingoFlashWinner: false,
+  bingoFlashName:   null,
+  showBingoFlash: (isWinner, name) => set({ bingoFlash: true, bingoFlashWinner: isWinner, bingoFlashName: name }),
+  clearBingoFlash: () => set({ bingoFlash: false }),
+
   // ── Winners ─────────────────────────────────────────────
   winners:         [],
   prizeShare:      0,
@@ -185,8 +192,11 @@ export const useGameStore = create((set, get) => ({
   setWinners: (winners, prizeShare) => set({
     winners,
     prizeShare,
-    showCelebration: true,
+    showCelebration: false, // flash shows first, celebration delayed
   }),
+
+  // Called after flash completes to show celebration
+  showCelebrationAfterFlash: () => set({ showCelebration: true }),
 
   clearCelebration: () => set({ showCelebration: false }),
   setActiveTab:     (tab) => set({ activeTab: tab }),
