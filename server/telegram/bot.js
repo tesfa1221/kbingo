@@ -236,7 +236,7 @@ async function handleConversationStep(chatId, userId, text, state) {
         await db.query(
           `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, status, admin_note)
            VALUES (?, 'DEPOSIT', ?, ?, ?, 'PENDING', ?)`,
-          [u.id, amount, balBefore, balBefore, `SMS (Telegram): ${text.substring(0, 500)}`]
+          [u.id, amount, balBefore, balBefore, `SMS: ${text.substring(0, 500)}`]
         );
         clearState(userId);
         await sendMessage(chatId,
